@@ -11,21 +11,18 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
 
-  /* весь экран — один canvas с ЭЛТ-шейдером */
   #crt {
     position: fixed; inset: 0;
     width: 100%; height: 100%;
     display: block;
     background: #000;
   }
-  /* запасной вариант без WebGL */
   #crt.nogl { filter: blur(0.5px) contrast(1.1); }
   body.nogl-body::after {
     content: ""; position: fixed; inset: 0; pointer-events: none;
     background: repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0, rgba(0,0,0,0) 2px, rgba(0,0,0,.22) 3px, rgba(0,0,0,0) 4px);
   }
 
-  /* ===== КНОПКИ В УГЛУ ===== */
   .corner-btn {
     position: fixed;
     top: max(12px, env(safe-area-inset-top));
@@ -50,7 +47,6 @@
   #gear.open { transform: rotate(180deg); }
   #fsBtn { right: calc(max(12px, env(safe-area-inset-right)) + 64px); }
 
-  /* ===== МЕНЮ — КОМПАКТНОЕ ОКНО В УГЛУ ===== */
   .backdrop {
     position: fixed; inset: 0; z-index: 10;
     background: transparent;
@@ -142,18 +138,43 @@
   #panel .list-item button { padding: 4px 10px; min-height: 40px; min-width: 44px; font-size: 16px; margin-left: 8px; }
   .hint { font-size: 14px; color: #777; margin-top: 10px; }
 
+  .tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 8px;
+  }
+  .tab {
+    flex: 1;
+    background: #1a1a1a;
+    color: #888;
+    border: 1px solid #333;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    padding: 10px 8px;
+    min-height: 44px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: .2s;
+  }
+  .tab:hover { color: #ccc; background: #222; }
+  .tab.active {
+    color: #66ff88;
+    background: #113311;
+    border-color: #336633;
+  }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
   @media (prefers-reduced-motion: reduce) {
     #panel, #panel.open, #gear, .backdrop { transition-duration: .01s; }
   }
 
-  /* ===== В ИГРЕ ВИДНЫ ТОЛЬКО КНОПКИ ТАБЛО ===== */
   body:not([data-screen="game"]) .corner-btn,
   body:not([data-screen="game"]) #panel,
   body:not([data-screen="game"]) .backdrop { display: none; }
 
-  /* ===== ЭКРАНЫ: загрузка, меню, настройки, выход =====
-     Текст рисуется на canvas тем же шрифтом и тем же ЭЛТ-шейдером, что и табло.
-     HTML-элементы остаются невидимыми «зонами нажатия» и источником раскладки. */
   :root { --fs: min(7.4vh, 10vw); --padL: 4.5vw; --padT: 3.5vh; }
   .layer {
     position: fixed; inset: 0; z-index: 40;
@@ -175,14 +196,12 @@
     font-size: calc(var(--fs) * .8); height: calc(var(--fs) * .8); line-height: 1;
   }
 
-  /* --- загрузка: снизу слева --- */
   #bootText {
     position: absolute; left: var(--padL); bottom: var(--padT);
     font-size: var(--fs); height: var(--fs); line-height: 1; white-space: pre;
   }
   .cursor { display: none; }
 
-  /* --- меню, настройки, выход: по центру экрана --- */
   #menu, #settings, #bye {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     padding: 0 var(--padL); text-align: center;
@@ -197,9 +216,8 @@
   #bye .big { width: 100%; font-size: calc(var(--fs) * .8); margin-bottom: calc(var(--fs) * .5); }
   #bye .small { width: 100%; font-size: calc(var(--fs) * .55); }
 
-  /* --- панель табло: заголовок и выбор звука строки --- */
-  .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 14px; }
-  .panel-head h3 { margin: 0 !important; }
+  .panel-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+  .panel-head h3 { margin: 0 !important; flex: 1 1 100%; }
   #panel select.inline { flex: 1 1 auto; min-width: 0; }
   #panel .list-item select { flex: 0 0 auto; min-height: 40px; padding: 4px 8px; font-size: 15px; max-width: 150px; margin-left: 8px; }
   .list-item { flex-wrap: wrap; }
@@ -209,46 +227,68 @@
 
 <canvas id="crt"></canvas>
 
-<!-- Кнопки табло -->
 <button id="fsBtn" class="corner-btn" onclick="toggleFullscreen()" data-i18n-title="fsTitle">⛶</button>
 <button id="gear" class="corner-btn" onclick="togglePanel()" data-i18n-title="gearTitle">⚙</button>
 <div class="backdrop" id="backdrop" onclick="togglePanel(false)"></div>
 
-<!-- Панель редактирования табло -->
 <aside id="panel" aria-hidden="true">
   <div class="panel-head">
     <h3 data-i18n="panelTitle"></h3>
+    <select id="langSelect" class="inline" onchange="setLang(this.value)" data-i18n-title="sLang"></select>
     <button onclick="goMenu()" data-i18n="menuBtn"></button>
   </div>
 
-  <div class="row">
-    <label data-i18n="timeLabel"></label>
-    <input type="time" id="timeInput" step="1" value="00:00:00">
-    <button class="go" onclick="setTime()" data-i18n="setBtn"></button>
-    <button onclick="startClock()" data-i18n="startBtn"></button>
-    <button onclick="stopClock()" data-i18n="stopBtn"></button>
-    <button class="danger" onclick="resetClock()" data-i18n="resetBtn"></button>
+  <div class="tabs">
+    <button class="tab active" data-tab="custom" onclick="switchTab('custom')" data-i18n="tabCustom"></button>
+    <button class="tab" data-tab="scenarios" onclick="switchTab('scenarios')" data-i18n="tabScenarios"></button>
   </div>
 
-  <div class="row">
-    <select id="statusSelect"></select>
-    <input type="text" id="systemInput" data-i18n-ph="sysPh">
-    <input type="time" id="eventTime" step="1" value="01:23:53" data-i18n-title="timeAppear">
-    <select id="soundSelect" class="inline" data-i18n-title="msgSound"></select>
-    <button onclick="addLine()" data-i18n="addBtn"></button>
+  <div id="tab-custom" class="tab-content active">
+    <div class="row">
+      <label data-i18n="timeLabel"></label>
+      <input type="time" id="timeInput" step="1" value="00:00:00">
+      <button class="go" onclick="setTime()" data-i18n="setBtn"></button>
+      <button onclick="startClock()" data-i18n="startBtn"></button>
+      <button onclick="stopClock()" data-i18n="stopBtn"></button>
+      <button class="danger" onclick="resetClock()" data-i18n="resetBtn"></button>
+    </div>
+
+    <div class="row">
+      <select id="statusSelect"></select>
+      <input type="text" id="systemInput" data-i18n-ph="sysPh">
+      <input type="time" id="eventTime" step="1" value="01:23:53" data-i18n-title="timeAppear">
+      <select id="soundSelect" class="inline" data-i18n-title="msgSound"></select>
+      <button onclick="addLine()" data-i18n="addBtn"></button>
+    </div>
+
+    <div class="error" id="error"></div>
+    <div class="list" id="list"></div>
+    <div class="hint" data-i18n="hint"></div>
   </div>
 
-  <div class="error" id="error"></div>
-  <div class="list" id="list"></div>
-  <div class="hint" data-i18n="hint"></div>
+  <div id="tab-scenarios" class="tab-content">
+    <div class="row">
+      <label data-i18n="scenarioLabel"></label>
+      <select id="scenarioSelect"></select>
+    </div>
+    <div class="row">
+      <button class="go" onclick="loadScenario()" data-i18n="loadScenarioBtn"></button>
+      <button class="danger" onclick="deleteScenario()" data-i18n="deleteScenarioBtn"></button>
+    </div>
+    <div class="row">
+      <input type="text" id="scenarioName" data-i18n-ph="scenarioNamePh">
+      <button onclick="saveScenario()" data-i18n="saveScenarioBtn"></button>
+    </div>
+    <div class="error" id="scenarioError"></div>
+    <div class="list" id="scenarioList"></div>
+    <div class="hint" data-i18n="scenarioHint"></div>
+  </div>
 </aside>
 
-<!-- Загрузка -->
 <div id="boot" class="layer show">
   <div id="bootText" data-draw><span id="bootStr"></span><span class="cursor"></span></div>
 </div>
 
-<!-- Главное меню -->
 <div id="menu" class="layer">
   <h1 class="title" data-draw>Dynamically</h1>
   <nav class="menu-btns">
@@ -258,7 +298,6 @@
   </nav>
 </div>
 
-<!-- Настройки -->
 <div id="settings" class="layer overlay" onclick="if(event.target===this)closeSettings()">
   <div class="card" role="dialog" aria-modal="true">
     <h2 data-draw data-dim data-i18n="settings"></h2>
@@ -272,7 +311,6 @@
   </div>
 </div>
 
-<!-- Выход -->
 <div id="bye" class="layer" onclick="byeBack()">
   <div class="big" data-draw data-wrap data-i18n="exitBye"></div>
   <div class="small" data-draw data-wrap data-dim data-i18n="exitBack"></div>
@@ -282,7 +320,9 @@
 
 /* ================= ЯЗЫКИ ================= */
 
+// Порядок языков везде одинаковый: ru, en, uk, de, es, fr
 const LANG_NAMES = { ru: "Русский", en: "English", uk: "Українська", de: "Deutsch", es: "Español", fr: "Français" };
+const LANGS = Object.keys(LANG_NAMES);
 const STATUS_KEYS = ["fault", "overpressure", "disabled", "normal", "alarm", "off"];
 const ALARM_KEYS = ["fault", "overpressure"];
 
@@ -299,7 +339,17 @@ const I18N = {
     hint: "Строка появится на табло, когда время дойдёт до указанного. ✕ — удалить. У каждой строки свой звук.",
     fsTitle: "Полный экран", gearTitle: "Панель управления",
     exitBye: "Сеанс завершён. Можно закрыть вкладку.", exitBack: "Нажмите, чтобы вернуться в меню",
-    st_fault: "НЕИСПРАВН", st_overpressure: "ПРЕВЫШ ДАВЛ", st_disabled: "ОТКЛЮЧЕН", st_normal: "НОРМА", st_alarm: "АВАРИЯ", st_off: "ВЫКЛ"
+    st_fault: "НЕИСПРАВН", st_overpressure: "ПРЕВЫШ ДАВЛ", st_disabled: "ОТКЛЮЧЕН", st_normal: "НОРМА", st_alarm: "АВАРИЯ", st_off: "ВЫКЛ",
+    tabCustom: "Свои строки", tabScenarios: "Сценарии",
+    scenarioLabel: "Сценарий:", loadScenarioBtn: "▶ Загрузить", deleteScenarioBtn: "✕ Удалить",
+    saveScenarioBtn: "💾 Сохранить", scenarioNamePh: "Название сценария",
+    scenarioHint: "Загрузка сценария заменит текущие строки и установит время. Сохранение — сохранит текущие строки как свой сценарий.",
+    scenarioLoaded: "Загружен сценарий: {n}", scenarioSaved: "Сценарий сохранён: {n}",
+    scenarioDeleted: "Сценарий удалён: {n}", errScenarioName: "Ошибка: введи название сценария.",
+    errScenarioEmpty: "Ошибка: нет строк для сохранения.", errScenarioBuiltin: "Встроенный сценарий нельзя удалить.",
+    errStorage: "Ошибка: не удалось сохранить (память браузера недоступна).",
+    builtinTag: "встроенный",
+    nLines_one: "{n} строка", nLines_few: "{n} строки", nLines_many: "{n} строк", nLines_other: "{n} строки"
   },
   en: {
     loading: "Loading", prompt: "SELECT OPTION", play: "Play", settings: "Settings", exit: "Exit", back: "Back", menuBtn: "☰ Menu",
@@ -313,82 +363,154 @@ const I18N = {
     hint: "A line appears on the board when the time reaches its value. ✕ removes it. Each line has its own sound.",
     fsTitle: "Full screen", gearTitle: "Control panel",
     exitBye: "Session ended. You can close the tab.", exitBack: "Tap to return to the menu",
-    st_fault: "FAULT", st_overpressure: "OVERPRESSURE", st_disabled: "DISABLED", st_normal: "NORMAL", st_alarm: "ALARM", st_off: "OFF"
+    st_fault: "FAULT", st_overpressure: "OVERPRESSURE", st_disabled: "DISABLED", st_normal: "NORMAL", st_alarm: "ALARM", st_off: "OFF",
+    tabCustom: "My lines", tabScenarios: "Scenarios",
+    scenarioLabel: "Scenario:", loadScenarioBtn: "▶ Load", deleteScenarioBtn: "✕ Delete",
+    saveScenarioBtn: "💾 Save", scenarioNamePh: "Scenario name",
+    scenarioHint: "Loading a scenario replaces current lines and sets the time. Saving stores current lines as your scenario.",
+    scenarioLoaded: "Loaded scenario: {n}", scenarioSaved: "Saved scenario: {n}",
+    scenarioDeleted: "Deleted scenario: {n}", errScenarioName: "Error: enter a scenario name.",
+    errScenarioEmpty: "Error: no lines to save.", errScenarioBuiltin: "Built-in scenario cannot be deleted.",
+    errStorage: "Error: could not save (browser storage unavailable).",
+    builtinTag: "built-in",
+    nLines_one: "{n} line", nLines_other: "{n} lines"
   },
   uk: {
     loading: "Завантаження", prompt: "ОБЕРІТЬ ПУНКТ", play: "Грати", settings: "Налаштування", exit: "Вихід", back: "Назад", menuBtn: "☰ Меню",
     sSound: "Звук", sNoise: "Шум", sGlitch: "Збої", sSignal: "Сигнал", sLang: "Мова", test: "▶ Тест", on: "УВІМК", off: "ВИМК",
     sigDefault: "За замовчуванням", sigBuzzer: "Зумер (низький)", sigPiezo: "Пищалка (суха)", sigPc: "Біп ПК", sigNone: "Без звуку",
     panelTitle: "ПАНЕЛЬ КЕРУВАННЯ", timeLabel: "Час на табло:", setBtn: "Встановити", startBtn: "▶ Запустити", stopBtn: "■ Стоп",
-    resetBtn: "⟲ Скидання", addBtn: "+ Додати", sysPh: "Назва системи (напр. 2УЗМ-3)", msgSound: "Звук цього рядка", timeAppear: "Час появи рядка",
+    resetBtn: "⟲ Скинути", addBtn: "+ Додати", sysPh: "Назва системи (напр. 2УЗМ-3)", msgSound: "Звук цього рядка", timeAppear: "Час появи рядка",
     errSystem: "Помилка: вкажи назву системи.", errTime: "Помилка: невірний час.", timeSet: "Час встановлено: {t}",
     clockRun: "Годинник уже йде.", clockStop: "Годинник зупинено.", resetDone: "Скидання: 00:00:00.", removed: "Видалено: {s}",
     emptyList: "Поки порожньо. Додай перший рядок.",
-    hint: "Рядок з’явиться на табло, коли час дійде до вказаного. ✕ — видалити. Кожен рядок має свій звук.",
+    hint: "Рядок з'явиться на табло, коли час дійде до вказаного. ✕ — видалити. У кожного рядка свій звук.",
     fsTitle: "Повний екран", gearTitle: "Панель керування",
-    exitBye: "Сеанс завершено. Можна закрити вкладку.", exitBack: "Натисни, щоб повернутися в меню",
-    st_fault: "НЕСПРАВН", st_overpressure: "ПЕРЕВИЩ ТИСК", st_disabled: "ВІДКЛЮЧЕНО", st_normal: "НОРМА", st_alarm: "АВАРІЯ", st_off: "ВИМК"
+    exitBye: "Сеанс завершено. Можна закрити вкладку.", exitBack: "Натисніть, щоб повернутися до меню",
+    st_fault: "НЕСПРАВНІСТЬ", st_overpressure: "ПЕРЕВИЩ ТИСКУ", st_disabled: "ВИМКНЕНО", st_normal: "НОРМА", st_alarm: "АВАРІЯ", st_off: "ВИМК",
+    tabCustom: "Власні рядки", tabScenarios: "Сценарії",
+    scenarioLabel: "Сценарій:", loadScenarioBtn: "▶ Завантажити", deleteScenarioBtn: "✕ Видалити",
+    saveScenarioBtn: "💾 Зберегти", scenarioNamePh: "Назва сценарію",
+    scenarioHint: "Завантаження сценарію замінить поточні рядки та встановить час. Збереження — збереже поточні рядки як власний сценарій.",
+    scenarioLoaded: "Завантажено сценарій: {n}", scenarioSaved: "Сценарій збережено: {n}",
+    scenarioDeleted: "Сценарій видалено: {n}", errScenarioName: "Помилка: введи назву сценарію.",
+    errScenarioEmpty: "Помилка: немає рядків для збереження.", errScenarioBuiltin: "Вбудований сценарій не можна видалити.",
+    errStorage: "Помилка: не вдалося зберегти (пам'ять браузера недоступна).",
+    builtinTag: "вбудований",
+    nLines_one: "{n} рядок", nLines_few: "{n} рядки", nLines_many: "{n} рядків", nLines_other: "{n} рядка"
   },
   de: {
-    loading: "Laden", prompt: "AUSWAHL TREFFEN", play: "Spielen", settings: "Einstellungen", exit: "Beenden", back: "Zurück", menuBtn: "☰ Menü",
+    loading: "Laden", prompt: "OPTION WÄHLEN", play: "Spielen", settings: "Einstellungen", exit: "Beenden", back: "Zurück", menuBtn: "☰ Menü",
     sSound: "Ton", sNoise: "Rauschen", sGlitch: "Störungen", sSignal: "Signal", sLang: "Sprache", test: "▶ Test", on: "AN", off: "AUS",
     sigDefault: "Standard", sigBuzzer: "Summer (tief)", sigPiezo: "Piepser (trocken)", sigPc: "PC-Piep", sigNone: "Stumm",
     panelTitle: "STEUERPULT", timeLabel: "Zeit auf der Tafel:", setBtn: "Setzen", startBtn: "▶ Start", stopBtn: "■ Stopp",
-    resetBtn: "⟲ Reset", addBtn: "+ Hinzufügen", sysPh: "Systemname (z. B. 2UZM-3)", msgSound: "Ton dieser Zeile", timeAppear: "Zeitpunkt des Erscheinens",
-    errSystem: "Fehler: Systemname angeben.", errTime: "Fehler: ungültige Zeit.", timeSet: "Zeit gesetzt: {t}",
+    resetBtn: "⟲ Zurücksetzen", addBtn: "+ Hinzufügen", sysPh: "Systemname (z. B. 2UZM-3)", msgSound: "Ton dieser Zeile", timeAppear: "Zeitpunkt des Erscheinens",
+    errSystem: "Fehler: Systemnamen eingeben.", errTime: "Fehler: ungültige Zeit.", timeSet: "Zeit gesetzt: {t}",
     clockRun: "Die Uhr läuft bereits.", clockStop: "Uhr angehalten.", resetDone: "Zurückgesetzt: 00:00:00.", removed: "Entfernt: {s}",
     emptyList: "Noch leer. Füge die erste Zeile hinzu.",
-    hint: "Eine Zeile erscheint auf der Tafel, sobald die Zeit erreicht ist. ✕ entfernt sie. Jede Zeile hat ihren eigenen Ton.",
+    hint: "Eine Zeile erscheint auf der Tafel, sobald die Zeit den angegebenen Wert erreicht. ✕ löscht sie. Jede Zeile hat ihren eigenen Ton.",
     fsTitle: "Vollbild", gearTitle: "Steuerpult",
     exitBye: "Sitzung beendet. Du kannst den Tab schließen.", exitBack: "Tippen, um zum Menü zurückzukehren",
-    st_fault: "STÖRUNG", st_overpressure: "ÜBERDRUCK", st_disabled: "ABGESCHALTET", st_normal: "NORMAL", st_alarm: "ALARM", st_off: "AUS"
+    st_fault: "STÖRUNG", st_overpressure: "ÜBERDRUCK", st_disabled: "ABGESCHALTET", st_normal: "NORMAL", st_alarm: "ALARM", st_off: "AUS",
+    tabCustom: "Eigene Zeilen", tabScenarios: "Szenarien",
+    scenarioLabel: "Szenario:", loadScenarioBtn: "▶ Laden", deleteScenarioBtn: "✕ Löschen",
+    saveScenarioBtn: "💾 Speichern", scenarioNamePh: "Szenarioname",
+    scenarioHint: "Beim Laden eines Szenarios werden die aktuellen Zeilen ersetzt und die Zeit gesetzt. Speichern legt die aktuellen Zeilen als eigenes Szenario ab.",
+    scenarioLoaded: "Szenario geladen: {n}", scenarioSaved: "Szenario gespeichert: {n}",
+    scenarioDeleted: "Szenario gelöscht: {n}", errScenarioName: "Fehler: Szenarioname eingeben.",
+    errScenarioEmpty: "Fehler: keine Zeilen zum Speichern.", errScenarioBuiltin: "Ein integriertes Szenario kann nicht gelöscht werden.",
+    errStorage: "Fehler: Speichern nicht möglich (Browser-Speicher nicht verfügbar).",
+    builtinTag: "integriert",
+    nLines_one: "{n} Zeile", nLines_other: "{n} Zeilen"
   },
   es: {
-    loading: "Cargando", prompt: "ELIJA UNA OPCIÓN", play: "Jugar", settings: "Ajustes", exit: "Salir", back: "Atrás", menuBtn: "☰ Menú",
-    sSound: "Sonido", sNoise: "Ruido", sGlitch: "Fallos", sSignal: "Señal", sLang: "Idioma", test: "▶ Probar", on: "ON", off: "OFF",
-    sigDefault: "Predeterminado", sigBuzzer: "Zumbador (grave)", sigPiezo: "Pitido seco", sigPc: "Pitido de PC", sigNone: "Sin sonido",
-    panelTitle: "PANEL DE CONTROL", timeLabel: "Hora del panel:", setBtn: "Fijar", startBtn: "▶ Iniciar", stopBtn: "■ Parar",
-    resetBtn: "⟲ Reiniciar", addBtn: "+ Añadir", sysPh: "Nombre del sistema (p. ej. 2UZM-3)", msgSound: "Sonido de esta línea", timeAppear: "Hora de aparición",
+    loading: "Cargando", prompt: "ELIGE UNA OPCIÓN", play: "Jugar", settings: "Ajustes", exit: "Salir", back: "Atrás", menuBtn: "☰ Menú",
+    sSound: "Sonido", sNoise: "Ruido", sGlitch: "Fallos", sSignal: "Señal", sLang: "Idioma", test: "▶ Prueba", on: "SÍ", off: "NO",
+    sigDefault: "Predeterminado", sigBuzzer: "Zumbador (grave)", sigPiezo: "Pitido (seco)", sigPc: "Bip de PC", sigNone: "Silencio",
+    panelTitle: "PANEL DE CONTROL", timeLabel: "Hora en el tablero:", setBtn: "Fijar", startBtn: "▶ Iniciar", stopBtn: "■ Parar",
+    resetBtn: "⟲ Reiniciar", addBtn: "+ Añadir", sysPh: "Nombre del sistema (p. ej. 2UZM-3)", msgSound: "Sonido de esta línea", timeAppear: "Hora de aparición de la línea",
     errSystem: "Error: indica el nombre del sistema.", errTime: "Error: hora no válida.", timeSet: "Hora fijada: {t}",
     clockRun: "El reloj ya está en marcha.", clockStop: "Reloj detenido.", resetDone: "Reinicio: 00:00:00.", removed: "Eliminado: {s}",
-    emptyList: "Aún vacío. Añade la primera línea.",
-    hint: "La línea aparece en el panel cuando la hora llega a la indicada. ✕ la elimina. Cada línea tiene su propio sonido.",
+    emptyList: "Aún no hay nada. Añade la primera línea.",
+    hint: "La línea aparece en el tablero cuando la hora llega al valor indicado. ✕ la elimina. Cada línea tiene su propio sonido.",
     fsTitle: "Pantalla completa", gearTitle: "Panel de control",
     exitBye: "Sesión finalizada. Puedes cerrar la pestaña.", exitBack: "Toca para volver al menú",
-    st_fault: "AVERÍA", st_overpressure: "SOBREPRESIÓN", st_disabled: "DESACTIVADO", st_normal: "NORMAL", st_alarm: "ALARMA", st_off: "APAGADO"
+    st_fault: "AVERÍA", st_overpressure: "SOBREPRESIÓN", st_disabled: "DESACTIVADO", st_normal: "NORMAL", st_alarm: "ALARMA", st_off: "APAGADO",
+    tabCustom: "Mis líneas", tabScenarios: "Escenarios",
+    scenarioLabel: "Escenario:", loadScenarioBtn: "▶ Cargar", deleteScenarioBtn: "✕ Eliminar",
+    saveScenarioBtn: "💾 Guardar", scenarioNamePh: "Nombre del escenario",
+    scenarioHint: "Al cargar un escenario se reemplazan las líneas actuales y se fija la hora. Al guardar, las líneas actuales se almacenan como escenario propio.",
+    scenarioLoaded: "Escenario cargado: {n}", scenarioSaved: "Escenario guardado: {n}",
+    scenarioDeleted: "Escenario eliminado: {n}", errScenarioName: "Error: escribe el nombre del escenario.",
+    errScenarioEmpty: "Error: no hay líneas que guardar.", errScenarioBuiltin: "Un escenario integrado no se puede eliminar.",
+    errStorage: "Error: no se pudo guardar (almacenamiento del navegador no disponible).",
+    builtinTag: "integrado",
+    nLines_one: "{n} línea", nLines_many: "{n} líneas", nLines_other: "{n} líneas"
   },
   fr: {
-    loading: "Chargement", prompt: "CHOISISSEZ UNE OPTION", play: "Jouer", settings: "Paramètres", exit: "Quitter", back: "Retour", menuBtn: "☰ Menu",
-    sSound: "Son", sNoise: "Bruit", sGlitch: "Parasites", sSignal: "Signal", sLang: "Langue", test: "▶ Test", on: "ON", off: "OFF",
-    sigDefault: "Par défaut", sigBuzzer: "Vibreur (grave)", sigPiezo: "Bip sec", sigPc: "Bip PC", sigNone: "Muet",
-    panelTitle: "PUPITRE DE COMMANDE", timeLabel: "Heure du tableau :", setBtn: "Régler", startBtn: "▶ Démarrer", stopBtn: "■ Arrêt",
-    resetBtn: "⟲ Réinit.", addBtn: "+ Ajouter", sysPh: "Nom du système (ex. 2UZM-3)", msgSound: "Son de cette ligne", timeAppear: "Heure d’apparition",
-    errSystem: "Erreur : indiquez le nom du système.", errTime: "Erreur : heure invalide.", timeSet: "Heure réglée : {t}",
-    clockRun: "L’horloge tourne déjà.", clockStop: "Horloge arrêtée.", resetDone: "Réinitialisé : 00:00:00.", removed: "Supprimé : {s}",
-    emptyList: "Vide pour l’instant. Ajoutez la première ligne.",
-    hint: "La ligne s’affiche sur le tableau quand l’heure est atteinte. ✕ la supprime. Chaque ligne a son propre son.",
-    fsTitle: "Plein écran", gearTitle: "Pupitre de commande",
-    exitBye: "Session terminée. Vous pouvez fermer l’onglet.", exitBack: "Touchez pour revenir au menu",
-    st_fault: "DÉFAUT", st_overpressure: "SURPRESSION", st_disabled: "DÉSACTIVÉ", st_normal: "NORMAL", st_alarm: "ALARME", st_off: "ARRÊT"
+    loading: "Chargement", prompt: "CHOISISSEZ UNE OPTION", play: "Jouer", settings: "Réglages", exit: "Quitter", back: "Retour", menuBtn: "☰ Menu",
+    sSound: "Son", sNoise: "Bruit", sGlitch: "Parasites", sSignal: "Signal", sLang: "Langue", test: "▶ Test", on: "OUI", off: "NON",
+    sigDefault: "Par défaut", sigBuzzer: "Vibreur (grave)", sigPiezo: "Bip piézo (sec)", sigPc: "Bip PC", sigNone: "Silencieux",
+    panelTitle: "PANNEAU DE COMMANDE", timeLabel: "Heure du tableau :", setBtn: "Régler", startBtn: "▶ Démarrer", stopBtn: "■ Arrêt",
+    resetBtn: "⟲ Réinitialiser", addBtn: "+ Ajouter", sysPh: "Nom du système (ex. 2UZM-3)", msgSound: "Son de cette ligne", timeAppear: "Heure d'apparition de la ligne",
+    errSystem: "Erreur : saisissez le nom du système.", errTime: "Erreur : heure invalide.", timeSet: "Heure réglée : {t}",
+    clockRun: "L'horloge tourne déjà.", clockStop: "Horloge arrêtée.", resetDone: "Réinitialisé : 00:00:00.", removed: "Supprimé : {s}",
+    emptyList: "Rien pour l'instant. Ajoutez la première ligne.",
+    hint: "Une ligne s'affiche sur le tableau quand l'heure atteint la valeur indiquée. ✕ la supprime. Chaque ligne a son propre son.",
+    fsTitle: "Plein écran", gearTitle: "Panneau de commande",
+    exitBye: "Session terminée. Vous pouvez fermer l'onglet.", exitBack: "Touchez pour revenir au menu",
+    st_fault: "DÉFAUT", st_overpressure: "SURPRESSION", st_disabled: "DÉSACTIVÉ", st_normal: "NORMAL", st_alarm: "ALARME", st_off: "ARRÊT",
+    tabCustom: "Mes lignes", tabScenarios: "Scénarios",
+    scenarioLabel: "Scénario :", loadScenarioBtn: "▶ Charger", deleteScenarioBtn: "✕ Supprimer",
+    saveScenarioBtn: "💾 Enregistrer", scenarioNamePh: "Nom du scénario",
+    scenarioHint: "Charger un scénario remplace les lignes actuelles et règle l'heure. Enregistrer sauvegarde les lignes actuelles comme scénario personnel.",
+    scenarioLoaded: "Scénario chargé : {n}", scenarioSaved: "Scénario enregistré : {n}",
+    scenarioDeleted: "Scénario supprimé : {n}", errScenarioName: "Erreur : saisissez le nom du scénario.",
+    errScenarioEmpty: "Erreur : aucune ligne à enregistrer.", errScenarioBuiltin: "Un scénario intégré ne peut pas être supprimé.",
+    errStorage: "Erreur : enregistrement impossible (stockage du navigateur indisponible).",
+    builtinTag: "intégré",
+    nLines_one: "{n} ligne", nLines_many: "{n} lignes", nLines_other: "{n} lignes"
   }
 };
+
+// Страховка: если в каком-то языке не хватает ключа — берём английский
+LANGS.forEach(code => { I18N[code] = Object.assign({}, I18N.en, I18N[code]); });
 
 let lang = "ru";
 
 function t(key, vars) {
-  let str = (I18N[lang] && I18N[lang][key]);
+  let str = I18N[lang] && I18N[lang][key];
   if (str === undefined) str = I18N.en[key];
   if (str === undefined) str = key;
-  if (vars) for (const k in vars) str = str.replace("{" + k + "}", vars[k]);
+  if (vars) for (const k in vars) str = str.split("{" + k + "}").join(String(vars[k]));
   return str;
 }
+
+// Склонение по правилам языка (Intl.PluralRules): 1 строка / 2 строки / 5 строк
+function plural(key, n) {
+  let cat = "other";
+  try { cat = new Intl.PluralRules(lang).select(n); } catch (e) {}
+  const own = key + "_" + cat;
+  return t(I18N[lang][own] !== undefined ? own : key + "_other", { n });
+}
+
 function statusText(key) { return t("st_" + key); }
+
+// Берёт строку из массива переводов [ru, en, uk, de, es, fr]
+function pickTr(arr) {
+  const i = LANGS.indexOf(lang);
+  if (arr[i] !== undefined) return arr[i];
+  return arr[1] !== undefined ? arr[1] : arr[0];
+}
+
+// Текст системы в строке: у встроенных сценариев он переводится, у своих строк — как введён
+function lineSystem(l) { return l.tr ? pickTr(l.tr) : (l.system || ""); }
 
 /* ================= СОСТОЯНИЕ И НАСТРОЙКИ ================= */
 
 let lines = [];
 let shownIds = new Set();
-let doneIds = new Set();      // показанные и стёртые при переполнении
+let doneIds = new Set();
 let pendingIds = new Set();
 const MAX_ROWS = 10;
 let clockInterval = null;
@@ -402,6 +524,31 @@ let beepPreset = "buzzer";
 let screenState = "boot";
 const GLITCH_MIN_INTERVAL = 5000;
 let lastGlitch = 0;
+
+// «Эпоха» нужна, чтобы отложенные появления строк не срабатывали после сброса/смены времени/сценария
+let epoch = 0;
+function resetShown() {
+  epoch++;
+  shownIds.clear();
+  doneIds.clear();
+  pendingIds.clear();
+}
+
+// Шрифт Play подгружается кусками (латиница / кириллица). Просим именно те символы, что нужны
+// на текущем языке, и перерисовываем табло, когда шрифт приехал — иначе на canvas будет запасной шрифт.
+function loadFont(text) {
+  if (!document.fonts || !document.fonts.load || !text) return;
+  document.fonts.load("700 40px Play", text).then(() => { dirty = true; }).catch(() => {});
+}
+function langSample() {
+  let s = "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  Object.values(I18N[lang] || {}).forEach(v => { if (typeof v === "string") s += v; });
+  Object.values(BUILTIN_SCENARIOS).forEach(sc => {
+    s += pickTr(sc.name);
+    sc.lines.forEach(r => { s += pickTr(r[3]); });
+  });
+  return s;
+}
 
 const pad = n => String(n).padStart(2, "0");
 const LS_KEY = "dynamically.settings.v1";
@@ -426,6 +573,228 @@ function saveSettings() {
   } catch (e) {}
 }
 
+/* ================= СЦЕНАРИИ ================= */
+
+const SCENARIO_KEY = "dynamically.scenarios.v1";
+
+// Встроенные сценарии. Тексты — массивы переводов в порядке [ru, en, uk, de, es, fr].
+// Строка: [время, статус, звук, [тексты]]
+const BUILTIN_SCENARIOS = {
+  chaes: {
+    name: ["ЧАЭС 26.04.1986", "Chernobyl NPP 26.04.1986", "ЧАЕС 26.04.1986", "Tschernobyl 26.04.1986", "Chernóbil 26/04/1986", "Tchernobyl 26/04/1986"],
+    startTime: "01:23:40",
+    lines: [
+      ["01:23:40", "normal",       "default", ["ТГ-8 РАЗГРУЗКА", "TG-8 UNLOADING", "ТГ-8 РОЗВАНТАЖЕННЯ", "TG-8 ENTLASTUNG", "TG-8 DESCARGA", "TG-8 DÉLESTAGE"]],
+      ["01:23:42", "fault",        "default", ["АР-1 ОТКЛЮЧЕН", "AR-1 DISABLED", "АР-1 ВИМКНЕНО", "AR-1 ABGESCHALTET", "AR-1 DESACTIVADO", "AR-1 DÉSACTIVÉ"]],
+      ["01:23:44", "fault",        "default", ["АР-2 ОТКЛЮЧЕН", "AR-2 DISABLED", "АР-2 ВИМКНЕНО", "AR-2 ABGESCHALTET", "AR-2 DESACTIVADO", "AR-2 DÉSACTIVÉ"]],
+      ["01:23:46", "overpressure", "default", ["П2-1332 ПОДКЛ ПРИ АЗ", "P2-1332 ON AT SCRAM", "П2-1332 УВІМК ПРИ АЗ", "P2-1332 BEI AZ ZUGESCHALTET", "P2-1332 CONECTADO EN AZ", "P2-1332 ENCLENCHÉ À L'AZ"]],
+      ["01:23:48", "overpressure", "default", ["П1-1332 ПОДКЛ ПРИ АЗ", "P1-1332 ON AT SCRAM", "П1-1332 УВІМК ПРИ АЗ", "P1-1332 BEI AZ ZUGESCHALTET", "P1-1332 CONECTADO EN AZ", "P1-1332 ENCLENCHÉ À L'AZ"]],
+      ["01:23:50", "alarm",        "buzzer",  ["НЕГОТОВНОСТЬ АЗ", "SCRAM NOT READY", "НЕГОТОВНІСТЬ АЗ", "AZ NICHT BEREIT", "AZ NO LISTA", "AZ NON PRÊTE"]],
+      ["01:23:52", "alarm",        "buzzer",  ["АЗ-5 СУЗ", "AZ-5 CPS", "АЗ-5 СУЗ", "AZ-5 SUZ", "AZ-5 SUZ", "AZ-5 SUZ"]],
+      ["01:23:54", "alarm",        "buzzer",  ["СНИЖ ДАВЛ ВОДЫ ВПРЫСКА", "INJECTION WATER PRESSURE LOW", "ЗНИЖ ТИСКУ ВОДИ ВПРИСКУ", "EINSPRITZWASSERDRUCK GESUNKEN", "BAJA PRESIÓN AGUA INYECCIÓN", "BASSE PRESSION EAU D'INJECTION"]],
+      ["01:23:56", "alarm",        "buzzer",  ["ОТКЛЮЧЕНИЕ АР ПО НЕИСПР", "AR TRIP ON FAULT", "ВИМКНЕННЯ АР ЗА НЕСПР", "AR-ABSCHALTUNG BEI STÖRUNG", "DISPARO AR POR FALLO", "DÉCLENCHEMENT AR SUR DÉFAUT"]],
+      ["01:23:58", "alarm",        "buzzer",  ["СТОПОРНЫЕ КРАНЫ ЗАКРЫТЫ", "STOP VALVES CLOSED", "СТОПОРНІ КРАНИ ЗАКРИТО", "ABSPERRVENTILE GESCHLOSSEN", "VÁLVULAS DE PARADA CERRADAS", "VANNES D'ARRÊT FERMÉES"]]
+    ]
+  },
+  lnpp: {
+    name: ["Ленинградская АЭС (РБМК)", "Leningrad NPP (RBMK)", "Ленінградська АЕС (РБМК)", "KKW Leningrad (RBMK)", "C. N. Leningrado (RBMK)", "Centrale de Léningrad (RBMK)"],
+    startTime: "00:00:00",
+    lines: [
+      ["00:00:05", "normal",       "default", ["РБМК-1000 БЛОК 3", "RBMK-1000 UNIT 3", "РБМК-1000 БЛОК 3", "RBMK-1000 BLOCK 3", "RBMK-1000 UNIDAD 3", "RBMK-1000 TRANCHE 3"]],
+      ["00:00:10", "fault",        "default", ["СУЗ-1", "CPS-1", "СУЗ-1", "SUZ-1", "SUZ-1", "SUZ-1"]],
+      ["00:00:15", "overpressure", "default", ["КОНТУР 1", "LOOP 1", "КОНТУР 1", "KREISLAUF 1", "CIRCUITO 1", "CIRCUIT 1"]],
+      ["00:00:20", "alarm",        "buzzer",  ["АЗ-1 СРАБОТАЛА", "AZ-1 TRIPPED", "АЗ-1 СПРАЦЮВАЛА", "AZ-1 AUSGELÖST", "AZ-1 ACTIVADA", "AZ-1 DÉCLENCHÉE"]],
+      ["00:00:25", "alarm",        "buzzer",  ["СБРОС ПАРА В АТМОСФЕРУ", "STEAM RELEASE TO ATMOSPHERE", "СКИД ПАРИ В АТМОСФЕРУ", "DAMPFABGABE IN DIE ATMOSPHÄRE", "LIBERACIÓN DE VAPOR A LA ATMÓSFERA", "REJET DE VAPEUR DANS L'ATMOSPHÈRE"]]
+    ]
+  },
+  fuku: {
+    name: ["Фукусима (стилизация)", "Fukushima (stylized)", "Фукусіма (стилізація)", "Fukushima (stilisiert)", "Fukushima (estilizado)", "Fukushima (stylisé)"],
+    startTime: "14:46:00",
+    lines: [
+      ["14:46:00", "normal",       "default", ["ЗЕМЛЕТРЯСЕНИЕ M9.0", "EARTHQUAKE M9.0", "ЗЕМЛЕТРУС M9.0", "ERDBEBEN M9.0", "TERREMOTO M9.0", "SÉISME M9.0"]],
+      ["14:46:30", "alarm",        "buzzer",  ["ОТКЛЮЧЕНИЕ РЕАКТОРА", "REACTOR SHUTDOWN", "ВИМКНЕННЯ РЕАКТОРА", "REAKTORABSCHALTUNG", "APAGADO DEL REACTOR", "ARRÊT DU RÉACTEUR"]],
+      ["14:47:00", "fault",        "default", ["ПОТЕРЯ ПИТАНИЯ", "POWER LOSS", "ВТРАТА ЖИВЛЕННЯ", "STROMAUSFALL", "PÉRDIDA DE ENERGÍA", "PERTE D'ALIMENTATION"]],
+      ["14:50:00", "alarm",        "buzzer",  ["ЦУНАМИ 15М", "TSUNAMI 15 M", "ЦУНАМІ 15 М", "TSUNAMI 15 M", "TSUNAMI 15 M", "TSUNAMI 15 M"]],
+      ["14:55:00", "alarm",        "buzzer",  ["РАСПЛАВ ТОПЛИВА", "FUEL MELTDOWN", "РОЗПЛАВ ПАЛИВА", "BRENNSTOFFSCHMELZE", "FUSIÓN DEL COMBUSTIBLE", "FUSION DU COMBUSTIBLE"]]
+    ]
+  },
+  tmi: {
+    name: ["Трёхмильный остров", "Three Mile Island", "Трі-Майл-Айленд", "Three Mile Island", "Three Mile Island", "Three Mile Island"],
+    startTime: "04:00:00",
+    lines: [
+      ["04:00:00", "normal",       "default", ["БЛОК 2 TMI", "UNIT 2 TMI", "БЛОК 2 TMI", "BLOCK 2 TMI", "UNIDAD 2 TMI", "TRANCHE 2 TMI"]],
+      ["04:00:10", "fault",        "default", ["ОТКАЗ НАСОСА ПИТ ВОДЫ", "FEEDWATER PUMP FAILURE", "ВІДМОВА НАСОСА ЖИВЛЕННЯ ВОДОЮ", "AUSFALL SPEISEWASSERPUMPE", "FALLO DE BOMBA DE AGUA DE ALIMENTACIÓN", "DÉFAILLANCE POMPE D'ALIMENTATION"]],
+      ["04:00:20", "overpressure", "default", ["ПЕРВЫЙ КОНТУР", "PRIMARY LOOP", "ПЕРШИЙ КОНТУР", "PRIMÄRKREISLAUF", "CIRCUITO PRIMARIO", "CIRCUIT PRIMAIRE"]],
+      ["04:00:30", "alarm",        "buzzer",  ["АВАРИЙНАЯ ЗАЩИТА", "EMERGENCY PROTECTION", "АВАРІЙНИЙ ЗАХИСТ", "NOTSCHUTZ", "PROTECCIÓN DE EMERGENCIA", "PROTECTION D'URGENCE"]]
+    ]
+  },
+  drill: {
+    name: ["Учебная тревога", "Training alert", "Навчальна тривога", "Übungsalarm", "Alarma de simulacro", "Alerte d'exercice"],
+    startTime: "10:00:00",
+    lines: [
+      ["10:00:05", "normal",       "default", ["УЧЕНИЯ НАЧАЛО", "DRILL START", "НАВЧАННЯ ПОЧАТОК", "ÜBUNG BEGINN", "SIMULACRO INICIO", "EXERCICE DÉBUT"]],
+      ["10:00:10", "fault",        "default", ["ТРЕНАЖЁР ОШИБКА 1", "SIMULATOR ERROR 1", "ТРЕНАЖЕР ПОМИЛКА 1", "SIMULATOR FEHLER 1", "SIMULADOR ERROR 1", "SIMULATEUR ERREUR 1"]],
+      ["10:00:15", "overpressure", "default", ["ТРЕНАЖЁР ОШИБКА 2", "SIMULATOR ERROR 2", "ТРЕНАЖЕР ПОМИЛКА 2", "SIMULATOR FEHLER 2", "SIMULADOR ERROR 2", "SIMULATEUR ERREUR 2"]],
+      ["10:00:20", "alarm",        "buzzer",  ["УЧЕНИЯ КОНЕЦ", "DRILL END", "НАВЧАННЯ КІНЕЦЬ", "ÜBUNG ENDE", "SIMULACRO FIN", "EXERCICE FIN"]]
+    ]
+  }
+};
+
+function readCustomScenarios() {
+  try {
+    const o = JSON.parse(localStorage.getItem(SCENARIO_KEY) || "{}");
+    return (o && typeof o === "object" && !Array.isArray(o)) ? o : {};
+  } catch (e) { return {}; }
+}
+
+function writeCustomScenarios(obj) {
+  try { localStorage.setItem(SCENARIO_KEY, JSON.stringify(obj)); return true; }
+  catch (e) { return false; }
+}
+
+// Ключи в списке: "b:<id>" — встроенный (название переводится), "c:<имя>" — свой
+function scenarioEntries() {
+  const out = [];
+  Object.keys(BUILTIN_SCENARIOS).forEach(id => {
+    const b = BUILTIN_SCENARIOS[id];
+    out.push({ key: "b:" + id, name: pickTr(b.name), builtin: true, count: b.lines.length });
+  });
+  const custom = readCustomScenarios();
+  Object.keys(custom).forEach(n => {
+    const sc = custom[n];
+    out.push({ key: "c:" + n, name: n, builtin: false, count: sc && Array.isArray(sc.lines) ? sc.lines.length : 0 });
+  });
+  return out;
+}
+
+function resolveScenario(key) {
+  if (key.startsWith("b:")) {
+    const b = BUILTIN_SCENARIOS[key.slice(2)];
+    if (!b) return null;
+    return {
+      name: pickTr(b.name),
+      startTime: b.startTime,
+      lines: b.lines.map(r => ({ at: r[0], statusKey: r[1], sound: r[2], tr: r[3] }))
+    };
+  }
+  if (key.startsWith("c:")) {
+    const name = key.slice(2);
+    const sc = readCustomScenarios()[name];
+    if (!sc || !Array.isArray(sc.lines)) return null;
+    return { name, startTime: sc.startTime, lines: sc.lines };
+  }
+  return null;
+}
+
+function refreshScenarioSelect(selectKey) {
+  const sel = document.getElementById("scenarioSelect");
+  if (!sel) return;
+  const prev = selectKey || sel.value;
+  sel.innerHTML = "";
+  const entries = scenarioEntries();
+  entries.forEach(e => {
+    const o = document.createElement("option");
+    o.value = e.key;
+    o.textContent = e.name;
+    sel.appendChild(o);
+  });
+  if (entries.some(e => e.key === prev)) sel.value = prev;
+}
+
+function switchTab(name) {
+  document.querySelectorAll(".tab").forEach(tb => tb.classList.toggle("active", tb.dataset.tab === name));
+  document.querySelectorAll(".tab-content").forEach(c => c.classList.toggle("active", c.id === "tab-" + name));
+  if (name === "scenarios") { refreshScenarioSelect(); renderScenarioList(); }
+}
+
+function loadScenario() {
+  const key = document.getElementById("scenarioSelect").value;
+  const sc = resolveScenario(key);
+  if (!sc) return;
+  ensureAudio();
+  resetShown();
+  lines = [];
+  nextId = 1;
+  sc.lines.forEach(l => {
+    const at = parseTime(l.at);
+    if (at === null) return;
+    lines.push({
+      id: nextId++,
+      statusKey: STATUS_KEYS.includes(l.statusKey) ? l.statusKey : "normal",
+      system: l.system || "",
+      tr: l.tr || null,
+      at,
+      sound: l.sound || "default"
+    });
+  });
+  currentSeconds = parseTime(sc.startTime) || 0;
+  clearInterval(clockInterval);
+  clockInterval = null;
+  document.getElementById("timeInput").value = formatSeconds(currentSeconds);
+  renderTime();
+  renderList();
+  checkAppear();
+  loadFont(lines.map(lineSystem).join(""));
+  showError(t("scenarioLoaded", { n: sc.name }));
+  switchTab("custom");
+}
+
+function saveScenario() {
+  const name = document.getElementById("scenarioName").value.trim();
+  if (!name) { showScenarioError(t("errScenarioName")); return; }
+  if (lines.length === 0) { showScenarioError(t("errScenarioEmpty")); return; }
+  const custom = readCustomScenarios();
+  custom[name] = {
+    startTime: formatSeconds(currentSeconds),
+    lines: lines.slice().sort((a, b) => a.at - b.at).map(l => ({
+      at: formatSeconds(l.at), statusKey: l.statusKey, system: lineSystem(l), sound: l.sound || "default"
+    }))
+  };
+  if (!writeCustomScenarios(custom)) { showScenarioError(t("errStorage")); return; }
+  refreshScenarioSelect("c:" + name);
+  renderScenarioList();
+  document.getElementById("scenarioName").value = "";
+  showScenarioError(t("scenarioSaved", { n: name }));
+}
+
+function deleteScenario() {
+  const key = document.getElementById("scenarioSelect").value;
+  if (key.startsWith("b:")) { showScenarioError(t("errScenarioBuiltin")); return; }
+  const name = key.slice(2);
+  const custom = readCustomScenarios();
+  if (!Object.prototype.hasOwnProperty.call(custom, name)) return;
+  delete custom[name];
+  if (!writeCustomScenarios(custom)) { showScenarioError(t("errStorage")); return; }
+  refreshScenarioSelect();
+  renderScenarioList();
+  showScenarioError(t("scenarioDeleted", { n: name }));
+}
+
+function showScenarioError(msg) {
+  const el = document.getElementById("scenarioError");
+  if (!el) return;
+  el.textContent = msg;
+  if (msg) setTimeout(() => { if (el.textContent === msg) el.textContent = ""; }, 3500);
+}
+
+function renderScenarioList() {
+  const el = document.getElementById("scenarioList");
+  if (!el) return;
+  el.innerHTML = "";
+  scenarioEntries().forEach(e => {
+    const div = document.createElement("div");
+    div.className = "list-item";
+    const span = document.createElement("span");
+    span.textContent = e.name + " ";
+    const small = document.createElement("small");
+    small.style.color = "#666";
+    small.textContent = "(" + plural("nLines", e.count) + (e.builtin ? ", " + t("builtinTag") : "") + ")";
+    span.appendChild(small);
+    div.appendChild(span);
+    el.appendChild(div);
+  });
+}
+
 /* ================= ЗВУК ================= */
 
 let audioCtx = null;
@@ -444,11 +813,10 @@ function ensureAudio() {
   return audioCtx;
 }
 
-/* варианты сигнала */
 const BEEP_PRESETS = {
-  buzzer: { type: "sawtooth", f: 480,  dur: 0.20, vol: 0.10, lp: 1500 },  // низкий электронный зуммер
-  piezo:  { type: "square",   f: 2300, dur: 0.14, vol: 0.05, lp: 0    },  // сухая пищалка
-  pc:     { type: "square",   f: 880,  dur: 0.08, vol: 0.08, lp: 0    }   // BIOS-бип
+  buzzer: { type: "sawtooth", f: 480,  dur: 0.20, vol: 0.10, lp: 1500 },
+  piezo:  { type: "square",   f: 2300, dur: 0.14, vol: 0.05, lp: 0    },
+  pc:     { type: "square",   f: 880,  dur: 0.08, vol: 0.08, lp: 0    }
 };
 
 let lastBeepAt = 0;
@@ -460,7 +828,6 @@ function playBeep(name) {
   if (!ctx) return;
   const P = BEEP_PRESETS[typeof name === "string" ? name : beepPreset] || BEEP_PRESETS.buzzer;
 
-  // пачка сообщений: каждый следующий сигнал смещается на 1 мс
   const now = performance.now();
   beepCluster = (now - lastBeepAt < 160) ? beepCluster + 1 : 0;
   lastBeepAt = now;
@@ -499,7 +866,6 @@ function setBeepPreset(name) {
   playBeep();
 }
 
-/* стук клавиш при печати «Загрузка» (только если браузер уже разрешил звук) */
 function playTypeClick() {
   if (!soundOn || !audioCtx || audioCtx.state !== "running") return;
   const ctx = audioCtx, t0 = ctx.currentTime;
@@ -532,8 +898,6 @@ function playUiClick() {
   o.connect(g); g.connect(ctx.destination);
   o.start(t0); o.stop(t0 + 0.07);
 }
-
-/* ---------- тихий фоновый шум ---------- */
 
 let noiseNode = null;
 
@@ -597,14 +961,11 @@ function stopNoise() {
   noiseNode = null;
 }
 
-// первое касание разрешает звук в браузере
 document.addEventListener("pointerdown", () => { if (soundOn) ensureAudio(); });
-
-/* ---------- серия: 5 строк «НЕИСПРАВН/ПРЕВЫШ ДАВЛ» за секунду → длинный сигнал ---------- */
 
 const BURST_COUNT = 5;
 const BURST_WINDOW = 1000;
-const LONG_HOLD = 550;        // сколько тянется писк после последней строки серии
+const LONG_HOLD = 550;
 let alarmTimes = [];
 let longBeep = null;
 
@@ -655,7 +1016,6 @@ function killLongBeep() {
   longBeep = null;
 }
 
-/* у каждой строки свой звук: default / buzzer / piezo / pc / none */
 function onLineAppeared(line) {
   if (!soundOn || !line) return;
   const own = line.sound || "default";
@@ -697,13 +1057,13 @@ function showError(msg) {
   if (msg) setTimeout(() => { if (el.textContent === msg) el.textContent = ""; }, 3500);
 }
 
-/* ================= ЭКРАН: 2D-источник + ЭЛТ-шейдер (WebGL) ================= */
+/* ================= ЭКРАН ================= */
 
 const crt = document.getElementById("crt");
 const src = document.createElement("canvas");
 const sctx = src.getContext("2d");
 const FONT = "'Play','Arial Black',Impact,sans-serif";
-const SX = 0.86;               // сужение букв по ширине
+const SX = 0.86;
 const INK = "#f5f5f1";
 let gl = null, fctx = null, tex = null, U = {};
 let dirty = true, tear = 0, glitchTarget = null;
@@ -712,7 +1072,7 @@ function visibleRows() {
   return lines
     .filter(l => shownIds.has(l.id))
     .sort((a, b) => a.at - b.at)
-    .map(l => (statusText(l.statusKey) + " " + l.system).toUpperCase());
+    .map(l => (statusText(l.statusKey) + " " + lineSystem(l)).toLocaleUpperCase(lang));
 }
 
 function wrapText(text, maxW) {
@@ -767,20 +1127,15 @@ function drawSource() {
     fs *= 0.96;
   }
 
-  // время (чуть мельче и серее)
   const tColor = glitchTarget === "time" ? "#7fd4ff" : "#d2d2ce";
   drawText(formatSeconds(currentSeconds), left, baseTime, fs * 0.8, tColor, 0.05);
 
-  // строки
   let y = firstBase;
   wrapped.forEach((parts, i) => {
     const color = glitchTarget === i ? "#7fd4ff" : INK;
     parts.forEach(p => { drawText(p, left, y, fs, color, 0.05); y += pitch; });
   });
 }
-
-
-/* ---------- экраны (загрузка / меню / настройки / выход) в стиле табло ---------- */
 
 let appearT = 0;
 function markAppear() { appearT = performance.now(); }
@@ -793,7 +1148,6 @@ function textW(txt, size) {
   return sctx.measureText(txt).width * SX;
 }
 
-/* рамка, угловые надписи, самотест при загрузке, пыль — всё в духе старого монитора */
 function drawDecor(now) {
   const W = src.width, H = src.height;
   const base = Math.min(H * 0.074, W * 0.1);
@@ -802,7 +1156,6 @@ function drawDecor(now) {
   const left = m * 2.3, right = W - m * 2.3;
   const inkDim = "rgba(210,210,206,.85)";
 
-  // двойная рамка
   sctx.save();
   sctx.strokeStyle = "rgba(210,210,206,.5)";
   sctx.lineWidth = Math.max(1.5, H * 0.003);
@@ -814,7 +1167,6 @@ function drawDecor(now) {
   const e = now - appearT;
 
   if (screenState === "boot") {
-    // самотест в стиле BIOS над строкой «Загрузка»
     const mem = Math.max(0, Math.min(640, Math.floor((e - 700) / 800 * 640)));
     const items = [
       [0,    "DYNAMICALLY BIOS V1.0  (C) 1986"],
@@ -848,7 +1200,6 @@ function drawDecor(now) {
     }
   }
 
-  // пыль и крупинки на плёнке
   const specks = Math.random() < 0.5 ? 1 + Math.floor(Math.random() * 3) : 0;
   sctx.fillStyle = "rgba(255,255,255,.4)";
   for (let i = 0; i < specks; i++) {
@@ -870,7 +1221,6 @@ function drawUIScreen() {
   document.querySelectorAll(".layer.show [data-draw]").forEach(el => {
     const dt = now - appearT - idx * 140; idx++;
     if (dt < 0) return;
-    // «включение» с мерцанием, как у старого монитора
     const a = dt < 260 ? [0.9, 0.12, 1, 0.4, 1][Math.floor(dt / 52)] : 1;
 
     const cs = getComputedStyle(el);
@@ -913,7 +1263,7 @@ function drawUIScreen() {
         const vx = bx + sctx.measureText(label + " ").width * SX;
         drawText(val, vx, y, fs, valCol, 0.05);
       }
-      if (isTitle) {            // двойное подчёркивание под заголовком
+      if (isTitle) {
         sctx.fillStyle = col;
         const lh = Math.max(1.5, fs * 0.03);
         sctx.fillRect(bx, y + fs * 0.2, w2, lh);
@@ -950,7 +1300,6 @@ varying vec2 v;
 float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); }
 
 void main(){
-  /* выпуклость кинескопа */
   vec2 c0 = v*2.0-1.0;
   c0 *= 0.985;
   c0 *= 1.0 + (c0.yx*c0.yx) * vec2(0.032, 0.052);
@@ -961,19 +1310,16 @@ void main(){
   float s = max(1.0, res.y/720.0);
   vec2 px = vec2(1.0/res.x, 1.0/res.y);
 
-  /* сбой развёртки: горизонтальные разрывы */
   float rowA = floor(uv.y*38.0);
   float tm = floor(time*24.0);
   float shift = (hash(vec2(rowA, tm)) - 0.5) * step(0.72, hash(vec2(floor(uv.y*9.0), tm+3.0)));
   uv.x += tear * shift * 0.045;
 
-  /* старость: дрожание строк и редкий срыв кадровой синхронизации */
   float jit = hash(vec2(floor(uv.y*240.0), floor(time*30.0))) - 0.5;
   uv.x += aged * jit * 0.0016;
   float hold = step(0.975, fract(time*0.083));
   uv.y += aged * hold * 0.012 * sin(time*37.0);
 
-  /* аналоговая размазня по горизонтали + цветовые каёмки */
   vec3 col = vec3(0.0);
   float wsum = 0.0;
   for(int i=-3; i<=3; i++){
@@ -987,7 +1333,6 @@ void main(){
   }
   col /= wsum;
 
-  /* свечение люминофора */
   vec3 bl = vec3(0.0);
   for(int i=0; i<8; i++){
     float a = float(i)*0.785398;
@@ -998,27 +1343,23 @@ void main(){
   bl /= 12.8;
   col += bl * vec3(0.55, 0.60, 0.70) * (1.0 + 0.35*aged);
 
-  /* строки развёртки + чересстрочность */
   float P = 3.2 * s;
   float sl = 0.80 + 0.20*cos(6.28318*gl_FragCoord.y/P);
   float odd = mod(floor(gl_FragCoord.y/P) + floor(time*25.0), 2.0)*2.0 - 1.0;
   col *= sl * (1.0 + 0.035*odd);
 
-  /* бегущая полоса яркости */
   float roll = fract(time*0.06);
   float rb = smoothstep(0.14, 0.0, abs(uv.y - (1.0-roll)));
   col *= 1.0 + 0.07*rb;
 
-  /* шум и мерцание */
   float n = hash(gl_FragCoord.xy + vec2(time*61.0, time*17.0)) - 0.5;
   float lum = dot(col, vec3(0.333));
   col += n * (0.035 + 0.10*lum);
   col *= 0.965 + 0.035*hash(vec2(floor(time*60.0), 1.0));
-  col *= 1.0 - aged*0.05*hash(vec2(floor(time*14.0), 7.0));      /* мерцание */
-  col *= mix(vec3(1.0), vec3(1.0, 0.975, 0.9), aged);             /* выцветший люминофор */
+  col *= 1.0 - aged*0.05*hash(vec2(floor(time*14.0), 7.0));
+  col *= mix(vec3(1.0), vec3(1.0, 0.975, 0.9), aged);
   col += aged * (hash(gl_FragCoord.xy*0.5 + time*13.0) - 0.5) * 0.04;
 
-  /* виньетка и скругление краёв экрана */
   float vg = smoothstep(1.05, 0.30, length((v-0.5)*vec2(1.0,0.9)*1.25));
   col *= mix(0.45, 1.0, vg);
   float em = smoothstep(0.0,0.012,uv.x)*smoothstep(0.0,0.012,1.0-uv.x)
@@ -1089,7 +1430,7 @@ const t0 = performance.now();
 function frame() {
   if (screenState !== "game") {
     dirty = true;
-    if (glitchOn && Math.random() < 0.004) tear = 1;   // редкие сбои развёртки и в меню
+    if (glitchOn && Math.random() < 0.004) tear = 1;
   }
   if (dirty) {
     drawSource();
@@ -1116,7 +1457,7 @@ function frame() {
 function renderTime()  { dirty = true; }
 function renderLines() { dirty = true; }
 
-/* ================= ПАНЕЛЬ ТАБЛО ================= */
+/* ================= ПАНЕЛЬ ================= */
 
 function togglePanel(force) {
   const panel = document.getElementById("panel");
@@ -1143,14 +1484,17 @@ function renderList() {
   const el = document.getElementById("list");
   el.innerHTML = "";
   if (lines.length === 0) {
-    el.innerHTML = '<div style="color:#666; font-size:16px;">' + t("emptyList") + '</div>';
+    const empty = document.createElement("div");
+    empty.style.cssText = "color:#666; font-size:16px;";
+    empty.textContent = t("emptyList");
+    el.appendChild(empty);
     return;
   }
   lines.slice().sort((a, b) => a.at - b.at).forEach(l => {
     const div = document.createElement("div");
     div.className = "list-item";
     const span = document.createElement("span");
-    span.textContent = `${formatSeconds(l.at)} — ${statusText(l.statusKey)} ${l.system}`;
+    span.textContent = `${formatSeconds(l.at)} — ${statusText(l.statusKey)} ${lineSystem(l)}`;
 
     const sel = document.createElement("select");
     sel.title = t("msgSound");
@@ -1169,7 +1513,7 @@ function renderList() {
       doneIds.delete(l.id);
       renderList();
       renderLines();
-      showError(t("removed", { s: statusText(l.statusKey) + " " + l.system }));
+      showError(t("removed", { s: statusText(l.statusKey) + " " + lineSystem(l) }));
     };
     div.appendChild(span);
     div.appendChild(sel);
@@ -1180,16 +1524,17 @@ function renderList() {
 
 function checkAppear() {
   let changed = false;
+  const ep = epoch;
   lines.forEach(l => {
     if (!shownIds.has(l.id) && !doneIds.has(l.id) && !pendingIds.has(l.id) && currentSeconds >= l.at) {
       const delay = 50 + Math.random() * 150;
       const id = l.id;
       pendingIds.add(id);
       setTimeout(() => {
+        if (ep !== epoch) return;
         pendingIds.delete(id);
         const ln = lines.find(x => x.id === id);
-        if (ln && !shownIds.has(id)) {
-          // экран заполнен (10 строк) — стираем всё, остаётся только новая
+        if (ln && !shownIds.has(id) && currentSeconds >= ln.at) {
           if (shownIds.size >= MAX_ROWS) {
             shownIds.forEach(x => doneIds.add(x));
             shownIds.clear();
@@ -1217,6 +1562,7 @@ function addLine() {
 
   ensureAudio();
   lines.push({ id: nextId++, statusKey, system, at, sound });
+  loadFont(system);
   document.getElementById("systemInput").value = "";
   showError("");
   renderList();
@@ -1229,8 +1575,7 @@ function setTime() {
   if (sec === null) { showError(t("errTime")); return; }
   ensureAudio();
   currentSeconds = sec;
-  shownIds.clear();
-  doneIds.clear();
+  resetShown();
   renderTime();
   renderLines();
   checkAppear();
@@ -1258,14 +1603,12 @@ function resetClock() {
   clearInterval(clockInterval);
   clockInterval = null;
   currentSeconds = 0;
-  shownIds.clear();
-  doneIds.clear();
+  resetShown();
+  document.getElementById("timeInput").value = "00:00:00";
   renderTime();
   renderLines();
   showError(t("resetDone"));
 }
-
-/* ---------- глюки ---------- */
 
 function applyGlitch() {
   if (!glitchOn || screenState !== "game") return;
@@ -1288,7 +1631,7 @@ function startGlitch() {
   glitchInterval = setInterval(applyGlitch, 500);
 }
 
-/* ================= МЕНЮ, ЗАГРУЗКА, НАСТРОЙКИ ================= */
+/* ================= МЕНЮ / ЭКРАНЫ ================= */
 
 const $ = id => document.getElementById(id);
 let bootTimers = [];
@@ -1316,7 +1659,6 @@ function runBoot() {
     playTypeClick();
     if (i >= word.length) {
       clearInterval(typer);
-      // три точки по очереди, всего 2 секунды до меню
       let dots = 0;
       const dotTimer = setInterval(() => {
         dots = (dots + 1) % 4;
@@ -1346,7 +1688,6 @@ function menuPlay() {
   $("menu").classList.remove("show");
   setScreen("game");
   dirty = true;
-  try { history.pushState({ s: "game" }, "", ""); } catch (e) {}
 }
 
 function goMenu() {
@@ -1371,13 +1712,9 @@ function closeSettings() {
 function menuExit() {
   playUiClick();
   setTimeout(() => {
-    if (window.Android && typeof window.Android.exit === "function") {
-      window.Android.exit();
-      return;
-    }
     try { window.close(); } catch (e) {}
     $("menu").classList.remove("show");
-    $("bye").classList.add("show");      // если вкладку закрыть нельзя — экран прощания
+    $("bye").classList.add("show");
     markAppear();
   }, 120);
 }
@@ -1440,7 +1777,9 @@ function applyLang() {
     const v = t(el.dataset.i18nTitle);
     el.title = v; el.setAttribute("aria-label", v);
   });
-  // выпадающие списки панели
+  const ls = $("langSelect");
+  if (ls) ls.innerHTML = LANGS.map(c => `<option value="${c}"${c === lang ? " selected" : ""}>${LANG_NAMES[c]}</option>`).join("");
+  loadFont(langSample());
   const st = $("statusSelect");
   const prevStatus = st.value || "fault";
   st.innerHTML = STATUS_KEYS.map(k => `<option value="${k}"${k === prevStatus ? " selected" : ""}>${statusText(k)}</option>`).join("");
@@ -1448,6 +1787,8 @@ function applyLang() {
   ss.innerHTML = soundOptionsHtml(true, ss.value || "default");
   updateSettingsUI();
   renderList();
+  refreshScenarioSelect();
+  renderScenarioList();
   dirty = true;
 }
 
@@ -1480,21 +1821,11 @@ sizeCanvases();
 applyLang();
 startGlitch();
 togglePanel(false);
-if (document.fonts && document.fonts.load) {
-  document.fonts.load("700 40px Play", "АБВГ ABC 0123").then(() => { dirty = true; });
+if (document.fonts && document.fonts.addEventListener) {
+  document.fonts.addEventListener("loadingdone", () => { dirty = true; });
 }
 requestAnimationFrame(frame);
 runBoot();
-
-/* Кнопка «назад» в WebView триггерит popstate — возвращаемся в меню из игры.
-   Из меню popstate не обрабатываем: пусть MainActivity.onBackPressed() закроет приложение. */
-window.addEventListener("popstate", () => {
-  if (screenState === "game") {
-    showMenu();
-    try { history.pushState({ s: "menu" }, "", ""); } catch (e) {}
-  }
-});
-try { history.pushState({ s: "menu" }, "", ""); } catch (e) {}
 </script>
 </body>
-</html>
+ </html>
