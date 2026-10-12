@@ -352,7 +352,7 @@ const I18N = {
     hint: "La ligne s’affiche sur le tableau quand l’heure est atteinte. ✕ la supprime. Chaque ligne a son propre son.",
     fsTitle: "Plein écran", gearTitle: "Pupitre de commande",
     exitBye: "Session terminée. Vous pouvez fermer l’onglet.", exitBack: "Touchez pour revenir au menu",
-    st_fault: "DÉFAUT", st_overpressure: "SURPRESSION", st_disabled: "DÉSACTIVÉ", st_normal: "NORMAL", st_alarm: "ALARME", st_off: "ARRÊT"
+    st_fault: "DÉFAUT", st_overpressure: "SURPRESSION", st_désactivé: "DÉSACTIVÉ", st_normal: "NORMAL", st_alarm: "ALARME", st_off: "ARRÊT"
   }
 };
 
@@ -397,4 +397,4 @@ function loadSettings() {
       const nav = (navigator.language || "ru").slice(0, 2).toLowerCase();
       lang = I18N[nav] ? nav : "ru";
     }
-    if (typeof o.sound === "boolean") so
+    if (typeof o.sound === "boolean") s
