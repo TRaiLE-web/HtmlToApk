@@ -1,0 +1,1485 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Dynamically</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Play:wght@700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+
+  /* весь экран — один canvas с ЭЛТ-шейдером */
+  #crt {
+    position: fixed; inset: 0;
+    width: 100%; height: 100%;
+    display: block;
+    background: #000;
+  }
+  /* запасной вариант без WebGL */
+  #crt.nogl { filter: blur(0.5px) contrast(1.1); }
+  body.nogl-body::after {
+    content: ""; position: fixed; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0, rgba(0,0,0,0) 2px, rgba(0,0,0,.22) 3px, rgba(0,0,0,0) 4px);
+  }
+
+  /* ===== КНОПКИ В УГЛУ ===== */
+  .corner-btn {
+    position: fixed;
+    top: max(12px, env(safe-area-inset-top));
+    z-index: 30;
+    width: 52px; height: 52px;
+    padding: 0;
+    display: grid; place-items: center;
+    border-radius: 50%;
+    border: 1px solid #444;
+    background: rgba(20,20,20,.75);
+    color: #ddd;
+    font-size: 26px;
+    line-height: 1;
+    cursor: pointer;
+    opacity: .3;
+    -webkit-tap-highlight-color: transparent;
+    transition: opacity .25s, transform .5s cubic-bezier(.2,.8,.2,1), background .25s;
+  }
+  .corner-btn:hover, .corner-btn:focus-visible, .corner-btn.open { opacity: 1; background: rgba(40,40,40,.92); }
+  .corner-btn:focus-visible { outline: 2px solid #8cf; outline-offset: 2px; }
+  #gear { right: max(12px, env(safe-area-inset-right)); }
+  #gear.open { transform: rotate(180deg); }
+  #fsBtn { right: calc(max(12px, env(safe-area-inset-right)) + 64px); }
+
+  /* ===== МЕНЮ — КОМПАКТНОЕ ОКНО В УГЛУ ===== */
+  .backdrop {
+    position: fixed; inset: 0; z-index: 10;
+    background: transparent;
+    pointer-events: none;
+  }
+  .backdrop.show { pointer-events: auto; }
+
+  #panel {
+    position: fixed;
+    top: calc(max(12px, env(safe-area-inset-top)) + 64px);
+    right: max(12px, env(safe-area-inset-right));
+    z-index: 20;
+    width: min(500px, calc(100vw - 24px));
+    max-height: calc(100vh - 100px);
+    max-height: calc(100dvh - 100px);
+    overflow-y: auto;
+    padding: 18px;
+    background: #111;
+    border: 1px solid #3a3a3a;
+    border-radius: 16px;
+    box-shadow: 0 20px 50px rgba(0,0,0,.85);
+    color: #ccc;
+    font-family: 'Courier New', monospace;
+    font-size: 18px;
+    transform-origin: top right;
+    transform: translateY(-12px) scale(.82);
+    opacity: 0;
+    visibility: hidden;
+    transition: transform .35s cubic-bezier(.2,.9,.2,1), opacity .25s ease, visibility 0s linear .35s;
+  }
+  #panel.open {
+    transform: none;
+    opacity: 1;
+    visibility: visible;
+    transition: transform .35s cubic-bezier(.2,.9,.2,1), opacity .25s ease, visibility 0s;
+  }
+  #panel h3 {
+    margin: 0 0 16px;
+    color: #ddd;
+    font-size: 20px;
+    letter-spacing: 1px;
+  }
+  #panel label { font-size: 18px; color: #aaa; }
+  .row {
+    display: flex; gap: 10px;
+    margin-bottom: 12px;
+    flex-wrap: wrap; align-items: center;
+  }
+  #panel input, #panel select, #panel button {
+    background: #1a1a1a;
+    color: #eee;
+    border: 1px solid #444;
+    padding: 12px 14px;
+    min-height: 52px;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 18px;
+  }
+  #panel input:focus, #panel select:focus { outline: none; border-color: #888; }
+  #panel input[type="text"] { flex: 1 1 100%; min-width: 0; }
+  #panel input[type="time"] { flex: 1; min-width: 150px; }
+  #panel select { flex: 1 1 100%; }
+  #panel button { cursor: pointer; background: #222; transition: .2s; }
+  #panel button:hover { background: #333; border-color: #888; }
+  #panel button.go { color: #66ff88; border-color: #336633; }
+  #panel button.go:hover { background: #113311; }
+  #panel button.danger { color: #ff6666; border-color: #663333; }
+  #panel button.danger:hover { background: #331111; }
+
+  .error { color: #ff5555; font-size: 15px; min-height: 20px; margin: 4px 0 8px; }
+
+  .list {
+    margin-top: 14px;
+    border-top: 1px solid #333;
+    padding-top: 10px;
+    max-height: 30vh;
+    overflow-y: auto;
+  }
+  .list-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 10px;
+    background: #1a1a1a;
+    border-radius: 6px;
+    margin-bottom: 6px;
+    font-size: 16px;
+    color: #ccc;
+  }
+  .list-item span { flex: 1; }
+  #panel .list-item button { padding: 4px 10px; min-height: 40px; min-width: 44px; font-size: 16px; margin-left: 8px; }
+  .hint { font-size: 14px; color: #777; margin-top: 10px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #panel, #panel.open, #gear, .backdrop { transition-duration: .01s; }
+  }
+
+  /* ===== В ИГРЕ ВИДНЫ ТОЛЬКО КНОПКИ ТАБЛО ===== */
+  body:not([data-screen="game"]) .corner-btn,
+  body:not([data-screen="game"]) #panel,
+  body:not([data-screen="game"]) .backdrop { display: none; }
+
+  /* ===== ЭКРАНЫ: загрузка, меню, настройки, выход =====
+     Текст рисуется на canvas тем же шрифтом и тем же ЭЛТ-шейдером, что и табло.
+     HTML-элементы остаются невидимыми «зонами нажатия» и источником раскладки. */
+  :root { --fs: min(7.4vh, 10vw); --padL: 4.5vw; --padT: 3.5vh; }
+  .layer {
+    position: fixed; inset: 0; z-index: 40;
+    background: transparent;
+    font-family: 'Play', 'Arial Black', Impact, sans-serif; font-weight: 700;
+    color: transparent;
+    visibility: hidden; pointer-events: none;
+    -webkit-user-select: none; user-select: none;
+  }
+  .layer.show { visibility: visible; pointer-events: auto; }
+  .layer button {
+    display: block; width: 100%; margin: 0; padding: 0; border: 0; background: none;
+    font: inherit; color: transparent; text-align: left; cursor: pointer;
+    height: calc(var(--fs) * .92); line-height: 1;
+    -webkit-tap-highlight-color: transparent; outline: none;
+  }
+  .layer .title, .layer h2 {
+    margin: 0 0 calc(var(--fs) * .45); width: 100%; text-align: center;
+    font-size: calc(var(--fs) * .8); height: calc(var(--fs) * .8); line-height: 1;
+  }
+
+  /* --- загрузка: снизу слева --- */
+  #bootText {
+    position: absolute; left: var(--padL); bottom: var(--padT);
+    font-size: var(--fs); height: var(--fs); line-height: 1; white-space: pre;
+  }
+  .cursor { display: none; }
+
+  /* --- меню, настройки, выход: по центру экрана --- */
+  #menu, #settings, #bye {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 0 var(--padL); text-align: center;
+  }
+  .layer button { text-align: center; }
+  #menu .title { font-size: calc(var(--fs) * 1.3); height: calc(var(--fs) * 1.3); margin-bottom: calc(var(--fs) * .7); }
+  .menu-btns, .card { width: 100%; }
+  .menu-btns { font-size: var(--fs); }
+  .card { font-size: calc(var(--fs) * .8); }
+  .card button { height: calc(var(--fs) * .8 * .92); }
+  .card .back { margin-top: calc(var(--fs) * .4); }
+  #bye .big { width: 100%; font-size: calc(var(--fs) * .8); margin-bottom: calc(var(--fs) * .5); }
+  #bye .small { width: 100%; font-size: calc(var(--fs) * .55); }
+
+  /* --- панель табло: заголовок и выбор звука строки --- */
+  .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .panel-head h3 { margin: 0 !important; }
+  #panel select.inline { flex: 1 1 auto; min-width: 0; }
+  #panel .list-item select { flex: 0 0 auto; min-height: 40px; padding: 4px 8px; font-size: 15px; max-width: 150px; margin-left: 8px; }
+  .list-item { flex-wrap: wrap; }
+</style>
+</head>
+<body data-screen="boot">
+
+<canvas id="crt"></canvas>
+
+<!-- Кнопки табло -->
+<button id="fsBtn" class="corner-btn" onclick="toggleFullscreen()" data-i18n-title="fsTitle">⛶</button>
+<button id="gear" class="corner-btn" onclick="togglePanel()" data-i18n-title="gearTitle">⚙</button>
+<div class="backdrop" id="backdrop" onclick="togglePanel(false)"></div>
+
+<!-- Панель редактирования табло -->
+<aside id="panel" aria-hidden="true">
+  <div class="panel-head">
+    <h3 data-i18n="panelTitle"></h3>
+    <button onclick="goMenu()" data-i18n="menuBtn"></button>
+  </div>
+
+  <div class="row">
+    <label data-i18n="timeLabel"></label>
+    <input type="time" id="timeInput" step="1" value="00:00:00">
+    <button class="go" onclick="setTime()" data-i18n="setBtn"></button>
+    <button onclick="startClock()" data-i18n="startBtn"></button>
+    <button onclick="stopClock()" data-i18n="stopBtn"></button>
+    <button class="danger" onclick="resetClock()" data-i18n="resetBtn"></button>
+  </div>
+
+  <div class="row">
+    <select id="statusSelect"></select>
+    <input type="text" id="systemInput" data-i18n-ph="sysPh">
+    <input type="time" id="eventTime" step="1" value="01:23:53" data-i18n-title="timeAppear">
+    <select id="soundSelect" class="inline" data-i18n-title="msgSound"></select>
+    <button onclick="addLine()" data-i18n="addBtn"></button>
+  </div>
+
+  <div class="error" id="error"></div>
+  <div class="list" id="list"></div>
+  <div class="hint" data-i18n="hint"></div>
+</aside>
+
+<!-- Загрузка -->
+<div id="boot" class="layer show">
+  <div id="bootText" data-draw><span id="bootStr"></span><span class="cursor"></span></div>
+</div>
+
+<!-- Главное меню -->
+<div id="menu" class="layer">
+  <h1 class="title" data-draw>Dynamically</h1>
+  <nav class="menu-btns">
+    <button class="mbtn" data-draw data-n="1" onclick="menuPlay()" data-i18n="play"></button>
+    <button class="mbtn" data-draw data-n="2" onclick="openSettings()" data-i18n="settings"></button>
+    <button class="mbtn" data-draw data-n="3" onclick="menuExit()" data-i18n="exit"></button>
+  </nav>
+</div>
+
+<!-- Настройки -->
+<div id="settings" class="layer overlay" onclick="if(event.target===this)closeSettings()">
+  <div class="card" role="dialog" aria-modal="true">
+    <h2 data-draw data-dim data-i18n="settings"></h2>
+    <button id="tgSound" data-draw onclick="toggleSetting('sound')"></button>
+    <button id="tgNoise" data-draw onclick="toggleSetting('noise')"></button>
+    <button id="tgGlitch" data-draw onclick="toggleSetting('glitch')"></button>
+    <button id="btnSignal" data-draw onclick="cycleSignal()"></button>
+    <button data-draw onclick="playBeep()" data-i18n="test"></button>
+    <button id="btnLang" data-draw onclick="cycleLang()"></button>
+    <button class="back" data-draw onclick="closeSettings()" data-i18n="back"></button>
+  </div>
+</div>
+
+<!-- Выход -->
+<div id="bye" class="layer" onclick="byeBack()">
+  <div class="big" data-draw data-wrap data-i18n="exitBye"></div>
+  <div class="small" data-draw data-wrap data-dim data-i18n="exitBack"></div>
+</div>
+
+<script>
+
+/* ================= ЯЗЫКИ ================= */
+
+const LANG_NAMES = { ru: "Русский", en: "English", uk: "Українська", de: "Deutsch", es: "Español", fr: "Français" };
+const STATUS_KEYS = ["fault", "overpressure", "disabled", "normal", "alarm", "off"];
+const ALARM_KEYS = ["fault", "overpressure"];
+
+const I18N = {
+  ru: {
+    loading: "Загрузка", prompt: "ВЫБЕРИТЕ ПУНКТ", play: "Играть", settings: "Настройки", exit: "Выход", back: "Назад", menuBtn: "☰ Меню",
+    sSound: "Звук", sNoise: "Шум", sGlitch: "Глюки", sSignal: "Сигнал", sLang: "Язык", test: "▶ Тест", on: "ВКЛ", off: "ВЫКЛ",
+    sigDefault: "По умолчанию", sigBuzzer: "Зуммер (низкий)", sigPiezo: "Пищалка (сухая)", sigPc: "Бип ПК", sigNone: "Без звука",
+    panelTitle: "ПАНЕЛЬ УПРАВЛЕНИЯ", timeLabel: "Время на табло:", setBtn: "Установить", startBtn: "▶ Запустить", stopBtn: "■ Стоп",
+    resetBtn: "⟲ Сброс", addBtn: "+ Добавить", sysPh: "Название системы (напр. 2УЗМ-3)", msgSound: "Звук этой строки", timeAppear: "Время появления строки",
+    errSystem: "Ошибка: укажи название системы.", errTime: "Ошибка: неверное время.", timeSet: "Время установлено: {t}",
+    clockRun: "Часы уже идут.", clockStop: "Часы остановлены.", resetDone: "Сброс: 00:00:00.", removed: "Удалено: {s}",
+    emptyList: "Пока пусто. Добавь первую строку.",
+    hint: "Строка появится на табло, когда время дойдёт до указанного. ✕ — удалить. У каждой строки свой звук.",
+    fsTitle: "Полный экран", gearTitle: "Панель управления",
+    exitBye: "Сеанс завершён. Можно закрыть вкладку.", exitBack: "Нажмите, чтобы вернуться в меню",
+    st_fault: "НЕИСПРАВН", st_overpressure: "ПРЕВЫШ ДАВЛ", st_disabled: "ОТКЛЮЧЕН", st_normal: "НОРМА", st_alarm: "АВАРИЯ", st_off: "ВЫКЛ"
+  },
+  en: {
+    loading: "Loading", prompt: "SELECT OPTION", play: "Play", settings: "Settings", exit: "Exit", back: "Back", menuBtn: "☰ Menu",
+    sSound: "Sound", sNoise: "Noise", sGlitch: "Glitches", sSignal: "Signal", sLang: "Language", test: "▶ Test", on: "ON", off: "OFF",
+    sigDefault: "Default", sigBuzzer: "Buzzer (low)", sigPiezo: "Piezo (dry)", sigPc: "PC beep", sigNone: "Silent",
+    panelTitle: "CONTROL PANEL", timeLabel: "Board time:", setBtn: "Set", startBtn: "▶ Start", stopBtn: "■ Stop",
+    resetBtn: "⟲ Reset", addBtn: "+ Add", sysPh: "System name (e.g. 2UZM-3)", msgSound: "Sound of this line", timeAppear: "Time the line appears",
+    errSystem: "Error: enter a system name.", errTime: "Error: invalid time.", timeSet: "Time set: {t}",
+    clockRun: "The clock is already running.", clockStop: "Clock stopped.", resetDone: "Reset: 00:00:00.", removed: "Removed: {s}",
+    emptyList: "Nothing here yet. Add the first line.",
+    hint: "A line appears on the board when the time reaches its value. ✕ removes it. Each line has its own sound.",
+    fsTitle: "Full screen", gearTitle: "Control panel",
+    exitBye: "Session ended. You can close the tab.", exitBack: "Tap to return to the menu",
+    st_fault: "FAULT", st_overpressure: "OVERPRESSURE", st_disabled: "DISABLED", st_normal: "NORMAL", st_alarm: "ALARM", st_off: "OFF"
+  },
+  uk: {
+    loading: "Завантаження", prompt: "ОБЕРІТЬ ПУНКТ", play: "Грати", settings: "Налаштування", exit: "Вихід", back: "Назад", menuBtn: "☰ Меню",
+    sSound: "Звук", sNoise: "Шум", sGlitch: "Збої", sSignal: "Сигнал", sLang: "Мова", test: "▶ Тест", on: "УВІМК", off: "ВИМК",
+    sigDefault: "За замовчуванням", sigBuzzer: "Зумер (низький)", sigPiezo: "Пищалка (суха)", sigPc: "Біп ПК", sigNone: "Без звуку",
+    panelTitle: "ПАНЕЛЬ КЕРУВАННЯ", timeLabel: "Час на табло:", setBtn: "Встановити", startBtn: "▶ Запустити", stopBtn: "■ Стоп",
+    resetBtn: "⟲ Скидання", addBtn: "+ Додати", sysPh: "Назва системи (напр. 2УЗМ-3)", msgSound: "Звук цього рядка", timeAppear: "Час появи рядка",
+    errSystem: "Помилка: вкажи назву системи.", errTime: "Помилка: невірний час.", timeSet: "Час встановлено: {t}",
+    clockRun: "Годинник уже йде.", clockStop: "Годинник зупинено.", resetDone: "Скидання: 00:00:00.", removed: "Видалено: {s}",
+    emptyList: "Поки порожньо. Додай перший рядок.",
+    hint: "Рядок з’явиться на табло, коли час дійде до вказаного. ✕ — видалити. Кожен рядок має свій звук.",
+    fsTitle: "Повний екран", gearTitle: "Панель керування",
+    exitBye: "Сеанс завершено. Можна закрити вкладку.", exitBack: "Натисни, щоб повернутися в меню",
+    st_fault: "НЕСПРАВН", st_overpressure: "ПЕРЕВИЩ ТИСК", st_disabled: "ВІДКЛЮЧЕНО", st_normal: "НОРМА", st_alarm: "АВАРІЯ", st_off: "ВИМК"
+  },
+  de: {
+    loading: "Laden", prompt: "AUSWAHL TREFFEN", play: "Spielen", settings: "Einstellungen", exit: "Beenden", back: "Zurück", menuBtn: "☰ Menü",
+    sSound: "Ton", sNoise: "Rauschen", sGlitch: "Störungen", sSignal: "Signal", sLang: "Sprache", test: "▶ Test", on: "AN", off: "AUS",
+    sigDefault: "Standard", sigBuzzer: "Summer (tief)", sigPiezo: "Piepser (trocken)", sigPc: "PC-Piep", sigNone: "Stumm",
+    panelTitle: "STEUERPULT", timeLabel: "Zeit auf der Tafel:", setBtn: "Setzen", startBtn: "▶ Start", stopBtn: "■ Stopp",
+    resetBtn: "⟲ Reset", addBtn: "+ Hinzufügen", sysPh: "Systemname (z. B. 2UZM-3)", msgSound: "Ton dieser Zeile", timeAppear: "Zeitpunkt des Erscheinens",
+    errSystem: "Fehler: Systemname angeben.", errTime: "Fehler: ungültige Zeit.", timeSet: "Zeit gesetzt: {t}",
+    clockRun: "Die Uhr läuft bereits.", clockStop: "Uhr angehalten.", resetDone: "Zurückgesetzt: 00:00:00.", removed: "Entfernt: {s}",
+    emptyList: "Noch leer. Füge die erste Zeile hinzu.",
+    hint: "Eine Zeile erscheint auf der Tafel, sobald die Zeit erreicht ist. ✕ entfernt sie. Jede Zeile hat ihren eigenen Ton.",
+    fsTitle: "Vollbild", gearTitle: "Steuerpult",
+    exitBye: "Sitzung beendet. Du kannst den Tab schließen.", exitBack: "Tippen, um zum Menü zurückzukehren",
+    st_fault: "STÖRUNG", st_overpressure: "ÜBERDRUCK", st_disabled: "ABGESCHALTET", st_normal: "NORMAL", st_alarm: "ALARM", st_off: "AUS"
+  },
+  es: {
+    loading: "Cargando", prompt: "ELIJA UNA OPCIÓN", play: "Jugar", settings: "Ajustes", exit: "Salir", back: "Atrás", menuBtn: "☰ Menú",
+    sSound: "Sonido", sNoise: "Ruido", sGlitch: "Fallos", sSignal: "Señal", sLang: "Idioma", test: "▶ Probar", on: "ON", off: "OFF",
+    sigDefault: "Predeterminado", sigBuzzer: "Zumbador (grave)", sigPiezo: "Pitido seco", sigPc: "Pitido de PC", sigNone: "Sin sonido",
+    panelTitle: "PANEL DE CONTROL", timeLabel: "Hora del panel:", setBtn: "Fijar", startBtn: "▶ Iniciar", stopBtn: "■ Parar",
+    resetBtn: "⟲ Reiniciar", addBtn: "+ Añadir", sysPh: "Nombre del sistema (p. ej. 2UZM-3)", msgSound: "Sonido de esta línea", timeAppear: "Hora de aparición",
+    errSystem: "Error: indica el nombre del sistema.", errTime: "Error: hora no válida.", timeSet: "Hora fijada: {t}",
+    clockRun: "El reloj ya está en marcha.", clockStop: "Reloj detenido.", resetDone: "Reinicio: 00:00:00.", removed: "Eliminado: {s}",
+    emptyList: "Aún vacío. Añade la primera línea.",
+    hint: "La línea aparece en el panel cuando la hora llega a la indicada. ✕ la elimina. Cada línea tiene su propio sonido.",
+    fsTitle: "Pantalla completa", gearTitle: "Panel de control",
+    exitBye: "Sesión finalizada. Puedes cerrar la pestaña.", exitBack: "Toca para volver al menú",
+    st_fault: "AVERÍA", st_overpressure: "SOBREPRESIÓN", st_disabled: "DESACTIVADO", st_normal: "NORMAL", st_alarm: "ALARMA", st_off: "APAGADO"
+  },
+  fr: {
+    loading: "Chargement", prompt: "CHOISISSEZ UNE OPTION", play: "Jouer", settings: "Paramètres", exit: "Quitter", back: "Retour", menuBtn: "☰ Menu",
+    sSound: "Son", sNoise: "Bruit", sGlitch: "Parasites", sSignal: "Signal", sLang: "Langue", test: "▶ Test", on: "ON", off: "OFF",
+    sigDefault: "Par défaut", sigBuzzer: "Vibreur (grave)", sigPiezo: "Bip sec", sigPc: "Bip PC", sigNone: "Muet",
+    panelTitle: "PUPITRE DE COMMANDE", timeLabel: "Heure du tableau :", setBtn: "Régler", startBtn: "▶ Démarrer", stopBtn: "■ Arrêt",
+    resetBtn: "⟲ Réinit.", addBtn: "+ Ajouter", sysPh: "Nom du système (ex. 2UZM-3)", msgSound: "Son de cette ligne", timeAppear: "Heure d’apparition",
+    errSystem: "Erreur : indiquez le nom du système.", errTime: "Erreur : heure invalide.", timeSet: "Heure réglée : {t}",
+    clockRun: "L’horloge tourne déjà.", clockStop: "Horloge arrêtée.", resetDone: "Réinitialisé : 00:00:00.", removed: "Supprimé : {s}",
+    emptyList: "Vide pour l’instant. Ajoutez la première ligne.",
+    hint: "La ligne s’affiche sur le tableau quand l’heure est atteinte. ✕ la supprime. Chaque ligne a son propre son.",
+    fsTitle: "Plein écran", gearTitle: "Pupitre de commande",
+    exitBye: "Session terminée. Vous pouvez fermer l’onglet.", exitBack: "Touchez pour revenir au menu",
+    st_fault: "DÉFAUT", st_overpressure: "SURPRESSION", st_disabled: "DÉSACTIVÉ", st_normal: "NORMAL", st_alarm: "ALARME", st_off: "ARRÊT"
+  }
+};
+
+let lang = "ru";
+
+function t(key, vars) {
+  let str = (I18N[lang] && I18N[lang][key]);
+  if (str === undefined) str = I18N.en[key];
+  if (str === undefined) str = key;
+  if (vars) for (const k in vars) str = str.replace("{" + k + "}", vars[k]);
+  return str;
+}
+function statusText(key) { return t("st_" + key); }
+
+/* ================= СОСТОЯНИЕ И НАСТРОЙКИ ================= */
+
+let lines = [];
+let shownIds = new Set();
+let doneIds = new Set();      // показанные и стёртые при переполнении
+let pendingIds = new Set();
+const MAX_ROWS = 10;
+let clockInterval = null;
+let glitchInterval = null;
+let currentSeconds = 0;
+let nextId = 1;
+let glitchOn = true;
+let soundOn = true;
+let noiseOn = true;
+let beepPreset = "buzzer";
+let screenState = "boot";
+const GLITCH_MIN_INTERVAL = 5000;
+let lastGlitch = 0;
+
+const pad = n => String(n).padStart(2, "0");
+const LS_KEY = "dynamically.settings.v1";
+
+function loadSettings() {
+  try {
+    const o = JSON.parse(localStorage.getItem(LS_KEY) || "{}");
+    if (o.lang && I18N[o.lang]) lang = o.lang;
+    else {
+      const nav = (navigator.language || "ru").slice(0, 2).toLowerCase();
+      lang = I18N[nav] ? nav : "ru";
+    }
+    if (typeof o.sound === "boolean") soundOn = o.sound;
+    if (typeof o.noise === "boolean") noiseOn = o.noise;
+    if (typeof o.glitch === "boolean") glitchOn = o.glitch;
+    if (o.signal && ["buzzer", "piezo", "pc"].includes(o.signal)) beepPreset = o.signal;
+  } catch (e) {}
+}
+function saveSettings() {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify({ lang, sound: soundOn, noise: noiseOn, glitch: glitchOn, signal: beepPreset }));
+  } catch (e) {}
+}
+
+/* ================= ЗВУК ================= */
+
+let audioCtx = null;
+
+function ensureAudio() {
+  if (!audioCtx) {
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (e) {
+      console.warn("AudioContext недоступен:", e);
+      return null;
+    }
+  }
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  if (soundOn && noiseOn && !noiseNode) startNoise(audioCtx);
+  return audioCtx;
+}
+
+/* варианты сигнала */
+const BEEP_PRESETS = {
+  buzzer: { type: "sawtooth", f: 480,  dur: 0.20, vol: 0.10, lp: 1500 },  // низкий электронный зуммер
+  piezo:  { type: "square",   f: 2300, dur: 0.14, vol: 0.05, lp: 0    },  // сухая пищалка
+  pc:     { type: "square",   f: 880,  dur: 0.08, vol: 0.08, lp: 0    }   // BIOS-бип
+};
+
+let lastBeepAt = 0;
+let beepCluster = 0;
+
+function playBeep(name) {
+  if (!soundOn) return;
+  const ctx = ensureAudio();
+  if (!ctx) return;
+  const P = BEEP_PRESETS[typeof name === "string" ? name : beepPreset] || BEEP_PRESETS.buzzer;
+
+  // пачка сообщений: каждый следующий сигнал смещается на 1 мс
+  const now = performance.now();
+  beepCluster = (now - lastBeepAt < 160) ? beepCluster + 1 : 0;
+  lastBeepAt = now;
+  const k = Math.min(beepCluster, 12);
+  const t0 = ctx.currentTime + k * 0.001;
+  const vol = P.vol * (1 - Math.min(k, 8) * 0.05);
+
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = P.type;
+  osc.frequency.setValueAtTime(P.f, t0);
+  osc.detune.setValueAtTime((k % 2 ? 1 : -1) * k * 4, t0);
+
+  gain.gain.setValueAtTime(0.0001, t0);
+  gain.gain.linearRampToValueAtTime(vol, t0 + 0.006);
+  gain.gain.setValueAtTime(vol, t0 + P.dur - 0.012);
+  gain.gain.linearRampToValueAtTime(0, t0 + P.dur);
+
+  let last = osc;
+  if (P.lp) {
+    const f = ctx.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.setValueAtTime(P.lp, t0);
+    osc.connect(f);
+    last = f;
+  }
+  last.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(t0);
+  osc.stop(t0 + P.dur + 0.02);
+}
+
+function setBeepPreset(name) {
+  beepPreset = name;
+  saveSettings();
+  playBeep();
+}
+
+/* стук клавиш при печати «Загрузка» (только если браузер уже разрешил звук) */
+function playTypeClick() {
+  if (!soundOn || !audioCtx || audioCtx.state !== "running") return;
+  const ctx = audioCtx, t0 = ctx.currentTime;
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = "square";
+  o.frequency.setValueAtTime(1300 + Math.random() * 500, t0);
+  g.gain.setValueAtTime(0.045, t0);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.035);
+  o.connect(g); g.connect(ctx.destination);
+  o.start(t0); o.stop(t0 + 0.04);
+  const o2 = ctx.createOscillator(), g2 = ctx.createGain();
+  o2.type = "sine";
+  o2.frequency.setValueAtTime(170, t0);
+  g2.gain.setValueAtTime(0.06, t0);
+  g2.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.05);
+  o2.connect(g2); g2.connect(ctx.destination);
+  o2.start(t0); o2.stop(t0 + 0.06);
+}
+
+function playUiClick() {
+  if (!soundOn) return;
+  const ctx = ensureAudio();
+  if (!ctx || ctx.state !== "running") return;
+  const t0 = ctx.currentTime;
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = "square";
+  o.frequency.setValueAtTime(760, t0);
+  g.gain.setValueAtTime(0.05, t0);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.06);
+  o.connect(g); g.connect(ctx.destination);
+  o.start(t0); o.stop(t0 + 0.07);
+}
+
+/* ---------- тихий фоновый шум ---------- */
+
+let noiseNode = null;
+
+function makeNoiseBuffer(ctx, brown) {
+  const len = ctx.sampleRate * 2;
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < len; i++) {
+    const w = Math.random() * 2 - 1;
+    if (brown) { last = (last + 0.02 * w) / 1.02; d[i] = last * 3.5; }
+    else d[i] = w;
+  }
+  return buf;
+}
+
+function startNoise(ctx) {
+  if (noiseNode) return;
+  const t0 = ctx.currentTime;
+  const master = ctx.createGain();
+  master.gain.setValueAtTime(0.0001, t0);
+  master.gain.linearRampToValueAtTime(1, t0 + 2);
+  master.connect(ctx.destination);
+  const nodes = [];
+
+  const white = ctx.createBufferSource();
+  white.buffer = makeNoiseBuffer(ctx, false);
+  white.loop = true;
+  const hp = ctx.createBiquadFilter();
+  hp.type = "highpass"; hp.frequency.setValueAtTime(1800, t0);
+  const gh = ctx.createGain(); gh.gain.setValueAtTime(0.008, t0);
+  white.connect(hp); hp.connect(gh); gh.connect(master);
+  white.start(); nodes.push(white);
+
+  const brown = ctx.createBufferSource();
+  brown.buffer = makeNoiseBuffer(ctx, true);
+  brown.loop = true;
+  const gb = ctx.createGain(); gb.gain.setValueAtTime(0.05, t0);
+  brown.connect(gb); gb.connect(master);
+  brown.start(); nodes.push(brown);
+
+  [[50, 0.006], [100, 0.003]].forEach(([f, v]) => {
+    const o = ctx.createOscillator();
+    o.type = "sine"; o.frequency.setValueAtTime(f, t0);
+    const g = ctx.createGain(); g.gain.setValueAtTime(v, t0);
+    o.connect(g); g.connect(master);
+    o.start(); nodes.push(o);
+  });
+
+  noiseNode = { master, nodes };
+}
+
+function stopNoise() {
+  if (!noiseNode || !audioCtx) { noiseNode = null; return; }
+  const { master, nodes } = noiseNode;
+  const t0 = audioCtx.currentTime;
+  master.gain.cancelScheduledValues(t0);
+  master.gain.setValueAtTime(master.gain.value, t0);
+  master.gain.linearRampToValueAtTime(0.0001, t0 + 0.4);
+  nodes.forEach(n => { try { n.stop(t0 + 0.45); } catch (e) {} });
+  noiseNode = null;
+}
+
+// первое касание разрешает звук в браузере
+document.addEventListener("pointerdown", () => { if (soundOn) ensureAudio(); });
+
+/* ---------- серия: 5 строк «НЕИСПРАВН/ПРЕВЫШ ДАВЛ» за секунду → длинный сигнал ---------- */
+
+const BURST_COUNT = 5;
+const BURST_WINDOW = 1000;
+const LONG_HOLD = 550;        // сколько тянется писк после последней строки серии
+let alarmTimes = [];
+let longBeep = null;
+
+function playLongBeep() {
+  const ctx = ensureAudio();
+  if (!ctx) return;
+  if (!longBeep) {
+    const t0 = ctx.currentTime;
+    const o1 = ctx.createOscillator();
+    const o2 = ctx.createOscillator();
+    o1.type = "square";   o1.frequency.setValueAtTime(440, t0);
+    o2.type = "triangle"; o2.frequency.setValueAtTime(220, t0);
+    const g2 = ctx.createGain();
+    g2.gain.setValueAtTime(0.9, t0);
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(1100, t0);
+    filter.Q.setValueAtTime(2.5, t0);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.linearRampToValueAtTime(0.11, t0 + 0.02);
+    o1.connect(filter);
+    o2.connect(g2); g2.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    o1.start(); o2.start();
+    longBeep = {
+      gain, timer: null,
+      stop(at) { try { o1.stop(at); o2.stop(at); } catch (e) {} }
+    };
+  }
+  clearTimeout(longBeep.timer);
+  const lb = longBeep;
+  lb.timer = setTimeout(() => {
+    const t0 = ctx.currentTime;
+    lb.gain.gain.cancelScheduledValues(t0);
+    lb.gain.gain.setValueAtTime(0.11, t0);
+    lb.gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.18);
+    lb.stop(t0 + 0.2);
+    if (longBeep === lb) longBeep = null;
+  }, LONG_HOLD);
+}
+
+function killLongBeep() {
+  if (!longBeep) return;
+  clearTimeout(longBeep.timer);
+  longBeep.stop();
+  longBeep = null;
+}
+
+/* у каждой строки свой звук: default / buzzer / piezo / pc / none */
+function onLineAppeared(line) {
+  if (!soundOn || !line) return;
+  const own = line.sound || "default";
+  if (own === "none") return;
+  const now = performance.now();
+  if (ALARM_KEYS.includes(line.statusKey)) {
+    alarmTimes.push(now);
+    alarmTimes = alarmTimes.filter(x => now - x <= BURST_WINDOW);
+    if (alarmTimes.length >= BURST_COUNT) { playLongBeep(); return; }
+  }
+  if (longBeep) { playLongBeep(); return; }
+  playBeep(own === "default" ? beepPreset : own);
+}
+
+/* ================= ВРЕМЯ / ПАРСИНГ ================= */
+
+function parseTime(str) {
+  if (!str || typeof str !== "string") return null;
+  const parts = str.split(":");
+  if (parts.length < 2) return null;
+  const h = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  const s = parts[2] ? parseInt(parts[2], 10) : 0;
+  if (isNaN(h) || isNaN(m) || isNaN(s)) return null;
+  if (h < 0 || h > 23 || m < 0 || m > 59 || s < 0 || s > 59) return null;
+  return h * 3600 + m * 60 + s;
+}
+
+function formatSeconds(sec) {
+  const h = Math.floor(sec / 3600) % 24;
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  return `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+
+function showError(msg) {
+  const el = document.getElementById("error");
+  el.textContent = msg;
+  if (msg) setTimeout(() => { if (el.textContent === msg) el.textContent = ""; }, 3500);
+}
+
+/* ================= ЭКРАН: 2D-источник + ЭЛТ-шейдер (WebGL) ================= */
+
+const crt = document.getElementById("crt");
+const src = document.createElement("canvas");
+const sctx = src.getContext("2d");
+const FONT = "'Play','Arial Black',Impact,sans-serif";
+const SX = 0.86;               // сужение букв по ширине
+const INK = "#f5f5f1";
+let gl = null, fctx = null, tex = null, U = {};
+let dirty = true, tear = 0, glitchTarget = null;
+
+function visibleRows() {
+  return lines
+    .filter(l => shownIds.has(l.id))
+    .sort((a, b) => a.at - b.at)
+    .map(l => (statusText(l.statusKey) + " " + l.system).toUpperCase());
+}
+
+function wrapText(text, maxW) {
+  const words = text.split(/\s+/).filter(Boolean);
+  const out = [];
+  let cur = "";
+  for (const w of words) {
+    const t = cur ? cur + " " + w : w;
+    if (!cur || sctx.measureText(t).width * SX <= maxW) cur = t;
+    else { out.push(cur); cur = w; }
+  }
+  if (cur) out.push(cur);
+  return out.length ? out : [""];
+}
+
+function drawText(txt, x, y, size, color, bold) {
+  sctx.save();
+  sctx.translate(x, y);
+  sctx.scale(SX, 1);
+  sctx.font = `700 ${size}px ${FONT}`;
+  sctx.fillStyle = color;
+  sctx.strokeStyle = color;
+  sctx.lineJoin = "round";
+  sctx.lineWidth = size * bold;
+  sctx.strokeText(txt, 0, 0);
+  sctx.fillText(txt, 0, 0);
+  sctx.restore();
+}
+
+function drawSource() {
+  const W = src.width, H = src.height;
+  sctx.fillStyle = "#000";
+  sctx.fillRect(0, 0, W, H);
+  if (screenState !== "game") { drawUIScreen(); return; }
+
+  const rows = visibleRows();
+  const left = W * 0.045, top = H * 0.035;
+  const maxW = W - left * 2;
+  let fs = Math.min(H * 0.074, W * 0.1);
+  let wrapped, baseTime, firstBase, pitch;
+
+  for (let guard = 0; guard < 90; guard++) {
+    sctx.font = `700 ${fs}px ${FONT}`;
+    wrapped = rows.map(r => wrapText(r, maxW));
+    const n = wrapped.reduce((a, w) => a + w.length, 0);
+    pitch = fs * 0.92;
+    baseTime = top + fs * 0.8 * 0.72;
+    firstBase = baseTime + pitch * 1.55;
+    const lastBase = firstBase + Math.max(0, n - 1) * pitch;
+    const widest = Math.max(0, ...wrapped.flat().map(t => sctx.measureText(t).width * SX));
+    if ((lastBase + fs * 0.12 <= H * 0.985 && widest <= maxW) || fs < 8) break;
+    fs *= 0.96;
+  }
+
+  // время (чуть мельче и серее)
+  const tColor = glitchTarget === "time" ? "#7fd4ff" : "#d2d2ce";
+  drawText(formatSeconds(currentSeconds), left, baseTime, fs * 0.8, tColor, 0.05);
+
+  // строки
+  let y = firstBase;
+  wrapped.forEach((parts, i) => {
+    const color = glitchTarget === i ? "#7fd4ff" : INK;
+    parts.forEach(p => { drawText(p, left, y, fs, color, 0.05); y += pitch; });
+  });
+}
+
+
+/* ---------- экраны (загрузка / меню / настройки / выход) в стиле табло ---------- */
+
+let appearT = 0;
+function markAppear() { appearT = performance.now(); }
+
+let titleGlitchUntil = 0;
+const pad4 = n => String(n).padStart(4, "0");
+
+function textW(txt, size) {
+  sctx.font = `700 ${size}px ${FONT}`;
+  return sctx.measureText(txt).width * SX;
+}
+
+/* рамка, угловые надписи, самотест при загрузке, пыль — всё в духе старого монитора */
+function drawDecor(now) {
+  const W = src.width, H = src.height;
+  const base = Math.min(H * 0.074, W * 0.1);
+  const fs = base * 0.56;
+  const m = Math.min(W, H) * 0.022;
+  const left = m * 2.3, right = W - m * 2.3;
+  const inkDim = "rgba(210,210,206,.85)";
+
+  // двойная рамка
+  sctx.save();
+  sctx.strokeStyle = "rgba(210,210,206,.5)";
+  sctx.lineWidth = Math.max(1.5, H * 0.003);
+  sctx.strokeRect(m, m, W - 2 * m, H - 2 * m);
+  sctx.lineWidth = Math.max(1, H * 0.0015);
+  sctx.strokeRect(m * 1.5, m * 1.5, W - 3 * m, H - 3 * m);
+  sctx.restore();
+
+  const e = now - appearT;
+
+  if (screenState === "boot") {
+    // самотест в стиле BIOS над строкой «Загрузка»
+    const mem = Math.max(0, Math.min(640, Math.floor((e - 700) / 800 * 640)));
+    const items = [
+      [0,    "DYNAMICALLY BIOS V1.0  (C) 1986"],
+      [350,  "CPU 8086 ........ OK"],
+      [700,  "MEMORY TEST " + pad4(mem) + "K" + (mem >= 640 ? "  OK" : "")],
+      [1500, "DISPLAY CRT ..... OK"]
+    ].filter(it => e >= it[0]);
+    const bottom = H - H * 0.035 - base * 1.35;
+    const total = 4;
+    items.forEach((it, i) => {
+      const y = bottom - (total - 1 - i) * fs * 1.2;
+      drawText(it[1], W * 0.045, y, fs, inkDim, 0.04);
+    });
+  } else {
+    const top = m * 2.3 + fs * 0.72;
+    const bot = H - m * 2.3;
+    drawText(formatSeconds(Math.floor((now - t0) / 1000)), left, top, fs, inkDim, 0.04);
+    const tr = "DYN-86  V1.0";
+    drawText(tr, right - textW(tr, fs), top, fs, inkDim, 0.04);
+    drawText("MEM 640K OK", left, bot, fs, inkDim, 0.04);
+    const br = "(C) 1986";
+    drawText(br, right - textW(br, fs), bot, fs, inkDim, 0.04);
+
+    if (screenState === "menu" && $("menu").classList.contains("show") && e > 900 && (now % 1100) < 700) {
+      const p = t("prompt").toUpperCase();
+      const w = textW(p, fs);
+      const px = (W - w - fs * 0.7) / 2, py = bot - fs * 2.4;
+      drawText(p, px, py, fs, inkDim, 0.04);
+      sctx.fillStyle = inkDim;
+      sctx.fillRect(px + w + fs * 0.25, py - fs * 0.72, fs * 0.42, fs * 0.72);
+    }
+  }
+
+  // пыль и крупинки на плёнке
+  const specks = Math.random() < 0.5 ? 1 + Math.floor(Math.random() * 3) : 0;
+  sctx.fillStyle = "rgba(255,255,255,.4)";
+  for (let i = 0; i < specks; i++) {
+    const sz = (1 + Math.random() * 1.6) * (H / 420);
+    sctx.fillRect(Math.random() * W, Math.random() * H, sz, sz);
+  }
+}
+
+function drawUIScreen() {
+  const W = src.width;
+  const dpr = W / window.innerWidth;
+  const now = performance.now();
+  const left0 = W * 0.045;
+  let idx = 0;
+
+  drawDecor(now);
+  if (glitchOn && Math.random() < 0.003) titleGlitchUntil = now + 120 + Math.random() * 200;
+
+  document.querySelectorAll(".layer.show [data-draw]").forEach(el => {
+    const dt = now - appearT - idx * 140; idx++;
+    if (dt < 0) return;
+    // «включение» с мерцанием, как у старого монитора
+    const a = dt < 260 ? [0.9, 0.12, 1, 0.4, 1][Math.floor(dt / 52)] : 1;
+
+    const cs = getComputedStyle(el);
+    let fs = parseFloat(cs.fontSize) * dpr;
+    const r = el.getBoundingClientRect();
+    const center = cs.textAlign === "center";
+    const x = r.left * dpr;
+    const availW = center ? Math.max(40, r.width * dpr) : Math.max(40, W - x - left0);
+    let label = (el.dataset.l !== undefined ? el.dataset.l : el.textContent)
+      .replace(/▶/g, ">").trim().toUpperCase();
+    const val = el.dataset.v ? el.dataset.v.toUpperCase() : "";
+    const hot = el.tagName === "BUTTON" && (el.matches(":hover") || el.matches(":focus-visible"));
+    const isTitle = el.tagName === "H1";
+    let col = hot ? "#7fd4ff" : (el.hasAttribute("data-dim") ? "#d2d2ce" : INK);
+    if (isTitle && now < titleGlitchUntil) col = "#7fd4ff";
+    const valCol = hot ? "#7fd4ff" : (el.dataset.off ? "#77776f" : INK);
+
+    if (el.dataset.n) label = el.dataset.n + ". " + label;
+    if (hot) label = "> " + label + " <";
+
+    sctx.globalAlpha = a;
+    sctx.font = `700 ${fs}px ${FONT}`;
+
+    if (el.hasAttribute("data-wrap")) {
+      const lines = wrapText(label, availW);
+      let y = r.top * dpr + fs * 0.82;
+      lines.forEach(l => {
+        const lx = center ? x + (availW - sctx.measureText(l).width * SX) / 2 : x;
+        drawText(l, lx, y, fs, col, 0.05); y += fs * 0.92;
+      });
+    } else {
+      const full = val ? label + " " + val : label;
+      const w = sctx.measureText(full).width * SX;
+      if (w > availW) { fs *= availW / w; sctx.font = `700 ${fs}px ${FONT}`; }
+      const y = (r.top + r.height / 2) * dpr + fs * 0.36;
+      const w2 = sctx.measureText(full).width * SX;
+      const bx = center ? x + (availW - w2) / 2 : x;
+      drawText(label, bx, y, fs, col, 0.05);
+      if (val) {
+        const vx = bx + sctx.measureText(label + " ").width * SX;
+        drawText(val, vx, y, fs, valCol, 0.05);
+      }
+      if (isTitle) {            // двойное подчёркивание под заголовком
+        sctx.fillStyle = col;
+        const lh = Math.max(1.5, fs * 0.03);
+        sctx.fillRect(bx, y + fs * 0.2, w2, lh);
+        sctx.fillRect(bx, y + fs * 0.2 + lh * 2.4, w2, lh);
+      }
+      if (el.id === "bootText" && (now % 1000) < 500) {
+        const cx = bx + sctx.measureText(label).width * SX + fs * 0.14;
+        sctx.fillStyle = INK;
+        sctx.fillRect(cx, y - fs * 0.72, fs * 0.46, fs * 0.72);
+      }
+    }
+    sctx.globalAlpha = 1;
+  });
+}
+
+/* ---------- WebGL ---------- */
+
+const VS = `attribute vec2 p; varying vec2 v;
+void main(){ v = p*0.5+0.5; gl_Position = vec4(p,0.,1.); }`;
+
+const FS = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+uniform sampler2D t;
+uniform vec2 res;
+uniform float time;
+uniform float tear;
+uniform float aged;
+varying vec2 v;
+
+float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); }
+
+void main(){
+  /* выпуклость кинескопа */
+  vec2 c0 = v*2.0-1.0;
+  c0 *= 0.985;
+  c0 *= 1.0 + (c0.yx*c0.yx) * vec2(0.032, 0.052);
+  vec2 uv = c0*0.5+0.5;
+
+  if(uv.x<0.0 || uv.x>1.0 || uv.y<0.0 || uv.y>1.0){ gl_FragColor = vec4(0.,0.,0.,1.); return; }
+
+  float s = max(1.0, res.y/720.0);
+  vec2 px = vec2(1.0/res.x, 1.0/res.y);
+
+  /* сбой развёртки: горизонтальные разрывы */
+  float rowA = floor(uv.y*38.0);
+  float tm = floor(time*24.0);
+  float shift = (hash(vec2(rowA, tm)) - 0.5) * step(0.72, hash(vec2(floor(uv.y*9.0), tm+3.0)));
+  uv.x += tear * shift * 0.045;
+
+  /* старость: дрожание строк и редкий срыв кадровой синхронизации */
+  float jit = hash(vec2(floor(uv.y*240.0), floor(time*30.0))) - 0.5;
+  uv.x += aged * jit * 0.0016;
+  float hold = step(0.975, fract(time*0.083));
+  uv.y += aged * hold * 0.012 * sin(time*37.0);
+
+  /* аналоговая размазня по горизонтали + цветовые каёмки */
+  vec3 col = vec3(0.0);
+  float wsum = 0.0;
+  for(int i=-3; i<=3; i++){
+    float fi = float(i);
+    float k = exp(-fi*fi/4.0);
+    float ox = fi * px.x * 1.1 * s;
+    col.r += texture2D(t, vec2(uv.x + ox - 0.9*px.x*s, uv.y)).r * k;
+    col.g += texture2D(t, vec2(uv.x + ox,               uv.y)).g * k;
+    col.b += texture2D(t, vec2(uv.x + ox + 0.9*px.x*s,  uv.y)).b * k;
+    wsum += k;
+  }
+  col /= wsum;
+
+  /* свечение люминофора */
+  vec3 bl = vec3(0.0);
+  for(int i=0; i<8; i++){
+    float a = float(i)*0.785398;
+    vec2 d = vec2(cos(a), sin(a));
+    bl += texture2D(t, uv + d*px*5.0*s).rgb;
+    bl += texture2D(t, uv + d*px*12.0*s).rgb * 0.6;
+  }
+  bl /= 12.8;
+  col += bl * vec3(0.55, 0.60, 0.70) * (1.0 + 0.35*aged);
+
+  /* строки развёртки + чересстрочность */
+  float P = 3.2 * s;
+  float sl = 0.80 + 0.20*cos(6.28318*gl_FragCoord.y/P);
+  float odd = mod(floor(gl_FragCoord.y/P) + floor(time*25.0), 2.0)*2.0 - 1.0;
+  col *= sl * (1.0 + 0.035*odd);
+
+  /* бегущая полоса яркости */
+  float roll = fract(time*0.06);
+  float rb = smoothstep(0.14, 0.0, abs(uv.y - (1.0-roll)));
+  col *= 1.0 + 0.07*rb;
+
+  /* шум и мерцание */
+  float n = hash(gl_FragCoord.xy + vec2(time*61.0, time*17.0)) - 0.5;
+  float lum = dot(col, vec3(0.333));
+  col += n * (0.035 + 0.10*lum);
+  col *= 0.965 + 0.035*hash(vec2(floor(time*60.0), 1.0));
+  col *= 1.0 - aged*0.05*hash(vec2(floor(time*14.0), 7.0));      /* мерцание */
+  col *= mix(vec3(1.0), vec3(1.0, 0.975, 0.9), aged);             /* выцветший люминофор */
+  col += aged * (hash(gl_FragCoord.xy*0.5 + time*13.0) - 0.5) * 0.04;
+
+  /* виньетка и скругление краёв экрана */
+  float vg = smoothstep(1.05, 0.30, length((v-0.5)*vec2(1.0,0.9)*1.25));
+  col *= mix(0.45, 1.0, vg);
+  float em = smoothstep(0.0,0.012,uv.x)*smoothstep(0.0,0.012,1.0-uv.x)
+           * smoothstep(0.0,0.012,uv.y)*smoothstep(0.0,0.012,1.0-uv.y);
+  col *= em;
+
+  col = pow(clamp(col,0.0,1.0), vec3(0.96));
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
+function compile(type, code) {
+  const sh = gl.createShader(type);
+  gl.shaderSource(sh, code);
+  gl.compileShader(sh);
+  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
+  return sh;
+}
+
+function initGL() {
+  try {
+    gl = crt.getContext("webgl", { antialias: false, alpha: false }) ||
+         crt.getContext("experimental-webgl");
+    if (!gl) throw new Error("no webgl");
+    const prog = gl.createProgram();
+    gl.attachShader(prog, compile(gl.VERTEX_SHADER, VS));
+    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FS));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+    gl.useProgram(prog);
+
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(prog, "p");
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+
+    tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    ["res", "time", "tear", "t", "aged"].forEach(n => U[n] = gl.getUniformLocation(prog, n));
+    gl.uniform1i(U.t, 0);
+  } catch (e) {
+    console.warn("WebGL недоступен, запасной режим:", e);
+    gl = null;
+    fctx = crt.getContext("2d");
+    crt.classList.add("nogl");
+    document.body.classList.add("nogl-body");
+  }
+}
+
+function sizeCanvases() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(2, Math.round(window.innerWidth * dpr));
+  const h = Math.max(2, Math.round(window.innerHeight * dpr));
+  src.width = w; src.height = h;
+  crt.width = w; crt.height = h;
+  if (gl) gl.viewport(0, 0, w, h);
+  dirty = true;
+}
+window.addEventListener("resize", sizeCanvases);
+
+const t0 = performance.now();
+function frame() {
+  if (screenState !== "game") {
+    dirty = true;
+    if (glitchOn && Math.random() < 0.004) tear = 1;   // редкие сбои развёртки и в меню
+  }
+  if (dirty) {
+    drawSource();
+    if (gl) {
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+    } else {
+      fctx.drawImage(src, 0, 0);
+    }
+    dirty = false;
+  }
+  if (gl) {
+    gl.uniform2f(U.res, crt.width, crt.height);
+    gl.uniform1f(U.time, ((performance.now() - t0) / 1000) % 1000);
+    gl.uniform1f(U.tear, tear);
+    gl.uniform1f(U.aged, screenState === "game" ? 0 : 1);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+  tear = Math.max(0, tear - 0.06);
+  requestAnimationFrame(frame);
+}
+
+function renderTime()  { dirty = true; }
+function renderLines() { dirty = true; }
+
+/* ================= ПАНЕЛЬ ТАБЛО ================= */
+
+function togglePanel(force) {
+  const panel = document.getElementById("panel");
+  const open = typeof force === "boolean" ? force : !panel.classList.contains("open");
+  panel.classList.toggle("open", open);
+  document.getElementById("gear").classList.toggle("open", open);
+  panel.setAttribute("aria-hidden", String(!open));
+  panel.inert = !open;
+  document.getElementById("backdrop").classList.toggle("show", open);
+}
+
+function toggleFullscreen() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen().catch(() => {});
+}
+
+function soundOptionsHtml(withDefaultAndNone, selected) {
+  const keys = withDefaultAndNone ? ["default", "buzzer", "piezo", "pc", "none"] : ["buzzer", "piezo", "pc"];
+  const names = { default: "sigDefault", buzzer: "sigBuzzer", piezo: "sigPiezo", pc: "sigPc", none: "sigNone" };
+  return keys.map(k => `<option value="${k}"${k === selected ? " selected" : ""}>${t(names[k])}</option>`).join("");
+}
+
+function renderList() {
+  const el = document.getElementById("list");
+  el.innerHTML = "";
+  if (lines.length === 0) {
+    el.innerHTML = '<div style="color:#666; font-size:16px;">' + t("emptyList") + '</div>';
+    return;
+  }
+  lines.slice().sort((a, b) => a.at - b.at).forEach(l => {
+    const div = document.createElement("div");
+    div.className = "list-item";
+    const span = document.createElement("span");
+    span.textContent = `${formatSeconds(l.at)} — ${statusText(l.statusKey)} ${l.system}`;
+
+    const sel = document.createElement("select");
+    sel.title = t("msgSound");
+    sel.innerHTML = soundOptionsHtml(true, l.sound || "default");
+    sel.onchange = () => {
+      l.sound = sel.value;
+      if (l.sound !== "none") playBeep(l.sound === "default" ? beepPreset : l.sound);
+    };
+
+    const btn = document.createElement("button");
+    btn.textContent = "✕";
+    btn.className = "danger";
+    btn.onclick = () => {
+      lines = lines.filter(x => x.id !== l.id);
+      shownIds.delete(l.id);
+      doneIds.delete(l.id);
+      renderList();
+      renderLines();
+      showError(t("removed", { s: statusText(l.statusKey) + " " + l.system }));
+    };
+    div.appendChild(span);
+    div.appendChild(sel);
+    div.appendChild(btn);
+    el.appendChild(div);
+  });
+}
+
+function checkAppear() {
+  let changed = false;
+  lines.forEach(l => {
+    if (!shownIds.has(l.id) && !doneIds.has(l.id) && !pendingIds.has(l.id) && currentSeconds >= l.at) {
+      const delay = 50 + Math.random() * 150;
+      const id = l.id;
+      pendingIds.add(id);
+      setTimeout(() => {
+        pendingIds.delete(id);
+        const ln = lines.find(x => x.id === id);
+        if (ln && !shownIds.has(id)) {
+          // экран заполнен (10 строк) — стираем всё, остаётся только новая
+          if (shownIds.size >= MAX_ROWS) {
+            shownIds.forEach(x => doneIds.add(x));
+            shownIds.clear();
+          }
+          shownIds.add(id);
+          renderLines();
+          onLineAppeared(ln);
+        }
+      }, delay);
+      changed = true;
+    }
+  });
+  if (changed) renderLines();
+}
+
+function addLine() {
+  const statusKey = document.getElementById("statusSelect").value;
+  const system = document.getElementById("systemInput").value.trim();
+  const timeStr = document.getElementById("eventTime").value;
+  const sound = document.getElementById("soundSelect").value || "default";
+
+  if (!system) { showError(t("errSystem")); return; }
+  const at = parseTime(timeStr);
+  if (at === null) { showError(t("errTime")); return; }
+
+  ensureAudio();
+  lines.push({ id: nextId++, statusKey, system, at, sound });
+  document.getElementById("systemInput").value = "";
+  showError("");
+  renderList();
+  checkAppear();
+}
+
+function setTime() {
+  const val = document.getElementById("timeInput").value;
+  const sec = parseTime(val);
+  if (sec === null) { showError(t("errTime")); return; }
+  ensureAudio();
+  currentSeconds = sec;
+  shownIds.clear();
+  doneIds.clear();
+  renderTime();
+  renderLines();
+  checkAppear();
+  showError(t("timeSet", { t: formatSeconds(sec) }));
+}
+
+function startClock() {
+  if (clockInterval) { showError(t("clockRun")); return; }
+  ensureAudio();
+  clockInterval = setInterval(() => {
+    currentSeconds = (currentSeconds + 1) % 86400;
+    renderTime();
+    checkAppear();
+  }, 1000);
+  showError("");
+}
+
+function stopClock() {
+  clearInterval(clockInterval);
+  clockInterval = null;
+  showError(t("clockStop"));
+}
+
+function resetClock() {
+  clearInterval(clockInterval);
+  clockInterval = null;
+  currentSeconds = 0;
+  shownIds.clear();
+  doneIds.clear();
+  renderTime();
+  renderLines();
+  showError(t("resetDone"));
+}
+
+/* ---------- глюки ---------- */
+
+function applyGlitch() {
+  if (!glitchOn || screenState !== "game") return;
+  const now = Date.now();
+  if (now - lastGlitch < GLITCH_MIN_INTERVAL) return;
+  if (Math.random() > 0.5) return;
+  lastGlitch = now;
+
+  const n = visibleRows().length;
+  const pick = Math.floor(Math.random() * (n + 1));
+  glitchTarget = pick === n ? "time" : pick;
+  tear = Math.random() < 0.6 ? 1 : 0;
+  dirty = true;
+
+  setTimeout(() => { glitchTarget = null; dirty = true; }, 120 + Math.random() * 200);
+}
+
+function startGlitch() {
+  if (glitchInterval) clearInterval(glitchInterval);
+  glitchInterval = setInterval(applyGlitch, 500);
+}
+
+/* ================= МЕНЮ, ЗАГРУЗКА, НАСТРОЙКИ ================= */
+
+const $ = id => document.getElementById(id);
+let bootTimers = [];
+
+function setScreen(name) {
+  screenState = name;
+  markAppear();
+  document.body.dataset.screen = name;
+}
+
+function runBoot() {
+  bootTimers.forEach(clearTimeout); bootTimers.forEach(clearInterval); bootTimers = [];
+  setScreen("boot");
+  ["menu", "settings", "bye"].forEach(id => $(id).classList.remove("show"));
+  $("boot").classList.add("show");
+  const str = $("bootStr");
+  const word = t("loading");
+  str.textContent = "";
+  if (soundOn) ensureAudio();
+
+  let i = 0;
+  const typer = setInterval(() => {
+    i++;
+    str.textContent = word.slice(0, i);
+    playTypeClick();
+    if (i >= word.length) {
+      clearInterval(typer);
+      // три точки по очереди, всего 2 секунды до меню
+      let dots = 0;
+      const dotTimer = setInterval(() => {
+        dots = (dots + 1) % 4;
+        str.textContent = word + ".".repeat(dots);
+        if (dots > 0) playTypeClick();
+      }, 330);
+      bootTimers.push(dotTimer);
+      bootTimers.push(setTimeout(() => { clearInterval(dotTimer); showMenu(); }, 2000));
+    }
+  }, 95);
+  bootTimers.push(typer);
+}
+
+function showMenu() {
+  setScreen("menu");
+  $("boot").classList.remove("show");
+  $("settings").classList.remove("show");
+  $("bye").classList.remove("show");
+  const m = $("menu");
+  m.classList.remove("show");
+  m.classList.add("show");
+  markAppear();
+}
+
+function menuPlay() {
+  playUiClick();
+  $("menu").classList.remove("show");
+  setScreen("game");
+  dirty = true;
+}
+
+function goMenu() {
+  togglePanel(false);
+  showMenu();
+}
+
+function openSettings() {
+  playUiClick();
+  updateSettingsUI();
+  $("menu").classList.remove("show");
+  $("settings").classList.add("show");
+  markAppear();
+}
+function closeSettings() {
+  playUiClick();
+  $("settings").classList.remove("show");
+  $("menu").classList.add("show");
+  markAppear();
+}
+
+function menuExit() {
+  playUiClick();
+  setTimeout(() => {
+    try { window.close(); } catch (e) {}
+    $("menu").classList.remove("show");
+    $("bye").classList.add("show");      // если вкладку закрыть нельзя — экран прощания
+    markAppear();
+  }, 120);
+}
+function byeBack() { showMenu(); }
+
+function setRow(id, label, val, off) {
+  const b = $(id);
+  b.dataset.l = label; b.dataset.v = val;
+  if (off) b.dataset.off = "1"; else delete b.dataset.off;
+  b.textContent = label + " " + val;
+}
+
+function updateSettingsUI() {
+  setRow("tgSound", t("sSound"), soundOn ? t("on") : t("off"), !soundOn);
+  setRow("tgNoise", t("sNoise"), noiseOn ? t("on") : t("off"), !noiseOn);
+  setRow("tgGlitch", t("sGlitch"), glitchOn ? t("on") : t("off"), !glitchOn);
+  const names = { buzzer: "sigBuzzer", piezo: "sigPiezo", pc: "sigPc" };
+  setRow("btnSignal", t("sSignal"), t(names[beepPreset]));
+  setRow("btnLang", t("sLang"), LANG_NAMES[lang]);
+}
+
+function cycleSignal() {
+  const keys = ["buzzer", "piezo", "pc"];
+  setBeepPreset(keys[(keys.indexOf(beepPreset) + 1) % keys.length]);
+  updateSettingsUI();
+}
+function cycleLang() {
+  const keys = Object.keys(LANG_NAMES);
+  setLang(keys[(keys.indexOf(lang) + 1) % keys.length]);
+}
+
+function toggleSetting(name) {
+  if (name === "sound") {
+    soundOn = !soundOn;
+    if (!soundOn) { stopNoise(); killLongBeep(); }
+    else { ensureAudio(); playBeep(); }
+  } else if (name === "noise") {
+    noiseOn = !noiseOn;
+    if (noiseOn) { if (soundOn) ensureAudio(); } else stopNoise();
+  } else if (name === "glitch") {
+    glitchOn = !glitchOn;
+    if (!glitchOn) { glitchTarget = null; tear = 0; lastGlitch = 0; dirty = true; }
+  }
+  saveSettings();
+  updateSettingsUI();
+}
+
+function setLang(code) {
+  if (!I18N[code]) return;
+  lang = code;
+  saveSettings();
+  applyLang();
+}
+
+function applyLang() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll("[data-i18n-ph]").forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
+  document.querySelectorAll("[data-i18n-title]").forEach(el => {
+    const v = t(el.dataset.i18nTitle);
+    el.title = v; el.setAttribute("aria-label", v);
+  });
+  // выпадающие списки панели
+  const st = $("statusSelect");
+  const prevStatus = st.value || "fault";
+  st.innerHTML = STATUS_KEYS.map(k => `<option value="${k}"${k === prevStatus ? " selected" : ""}>${statusText(k)}</option>`).join("");
+  const ss = $("soundSelect");
+  ss.innerHTML = soundOptionsHtml(true, ss.value || "default");
+  updateSettingsUI();
+  renderList();
+  dirty = true;
+}
+
+document.addEventListener("pointerover", e => {
+  if (glitchOn && screenState !== "game" && e.target.closest && e.target.closest(".layer button")) tear = 1;
+});
+
+document.addEventListener("keydown", e => {
+  if (screenState === "game" || (e.key !== "ArrowDown" && e.key !== "ArrowUp")) return;
+  const btns = [...document.querySelectorAll(".layer.show button")];
+  if (!btns.length) return;
+  e.preventDefault();
+  let i = btns.indexOf(document.activeElement);
+  i = e.key === "ArrowDown" ? (i + 1) % btns.length : (i <= 0 ? btns.length - 1 : i - 1);
+  btns[i].focus();
+  playUiClick();
+});
+
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  if ($("settings").classList.contains("show")) closeSettings();
+  else togglePanel(false);
+});
+
+/* ================= СТАРТ ================= */
+
+loadSettings();
+initGL();
+sizeCanvases();
+applyLang();
+startGlitch();
+togglePanel(false);
+if (document.fonts && document.fonts.load) {
+  document.fonts.load("700 40px Play", "АБВГ ABC 0123").then(() => { dirty = true; });
+}
+requestAnimationFrame(frame);
+runBoot();
+</script>
+</body>
+</html>
